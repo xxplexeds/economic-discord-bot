@@ -17,7 +17,7 @@ FIHCOIN = "<:fihcoin:1575710572907987064>"
 
 
 class EconomyProfileView(discord.ui.LayoutView):
-    """Components V2 profile layout with the member avatar in the section accessory."""
+    """Components V2 profile layout with the member or server icon in its accessory."""
 
     def __init__(
         self,
@@ -122,7 +122,7 @@ async def balance(
 
     total = wallet + bank
     view = EconomyProfileView(
-        heading=f"{target.display_name}'s Fihcoin Balance",
+        heading=f"{target.mention}'s Fihcoin Balance",
         description=(
             f"**Wallet**\n{wallet:,.2f} {FIHCOIN}\n\n"
             f"**Bank**\n{bank:,.2f} {FIHCOIN}\n\n"
@@ -130,7 +130,10 @@ async def balance(
         ),
         avatar_url=target.display_avatar.url,
     )
-    await interaction.followup.send(view=view)
+    await interaction.followup.send(
+        view=view,
+        allowed_mentions=discord.AllowedMentions(users=True),
+    )
 
 
 @bot.tree.command(
@@ -166,10 +169,10 @@ async def leaderboard(interaction: discord.Interaction) -> None:
             lines.append(f"{marker} <@{member_id}> — **{total_balance:,.2f} {FIHCOIN}**")
         description = "\n".join(lines)
 
+    # Prefer the server icon; use the invoking member's avatar if the server has no icon.
     avatar_url = (
-        bot.user.display_avatar.url
-        if bot.user
-        else interaction.guild.icon.url if interaction.guild.icon
+        interaction.guild.icon.url
+        if interaction.guild.icon
         else interaction.user.display_avatar.url
     )
     view = EconomyProfileView(
