@@ -1,5 +1,34 @@
 # Fihcoin Economic Bot — Update Log
 
+## 2026-11-27 — Add interactive leaderboard pagination
+
+### Added
+- Added Previous and Next buttons to the public Components V2 leaderboard.
+- Added a page dropdown for jumping directly between leaderboard pages.
+- Display 10 members per page, current page, total pages, and total ranked members.
+- Keep ranking numbers continuous across pages and disable mention notifications during page updates.
+
+---
+
+
+## 2026-11-27 — Add leaderboard section divider
+
+### Changed
+- Split the leaderboard title, Top 10 description, and member rankings into separate Components V2 sections with a native Discord Separator between the description and rankings.
+- Kept the server icon and silent clickable member mentions.
+
+---
+
+
+## 2026-11-27 — Add balance section dividers
+
+### Changed
+- Rebuilt the `/balance` Components V2 layout with separate Wallet, Bank, and Total text sections divided by native Discord Separator components.
+- Kept the member avatar, silent clickable mention, and shared leaderboard profile layout intact.
+
+---
+
+
 ## 2026-11-27 — Disable leaderboard mention notifications
 
 ### Fixed
