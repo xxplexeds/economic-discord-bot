@@ -3,6 +3,7 @@ import os
 from collections.abc import AsyncIterator
 
 from dotenv import load_dotenv
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -57,14 +58,15 @@ async def initialize_database() -> None:
     engine = get_engine()
 
     async with engine.begin() as connection:
+        # The bot and API may boot at the same time. Serialize the initial
+        # create_all operation so they cannot race to create the same tables.
+        await connection.execute(text("SELECT pg_advisory_xact_lock(68421057)"))
         await connection.run_sync(Base.metadata.create_all)
 
     logger.info("PostgreSQL connection verified; database schema is ready.")
 
 
 async def check_database_connection() -> bool:
-    from sqlalchemy import text
-
     engine = get_engine()
     async with engine.connect() as connection:
         await connection.execute(text("SELECT 1"))
