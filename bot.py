@@ -2,8 +2,9 @@ import logging
 import os
 
 import discord
-from discord import app_commands
 from discord.ext import commands
+
+from database import close_database, initialize_database
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO").upper(),
@@ -23,6 +24,9 @@ class FihcoinBot(commands.Bot):
         )
 
     async def setup_hook(self) -> None:
+        await initialize_database()
+        logger.info("PostgreSQL is ready.")
+
         guild_id = os.getenv("DISCORD_GUILD_ID")
 
         if guild_id:
@@ -33,6 +37,12 @@ class FihcoinBot(commands.Bot):
         else:
             synced = await self.tree.sync()
             logger.info("Synced %s global application commands", len(synced))
+
+    async def close(self) -> None:
+        try:
+            await close_database()
+        finally:
+            await super().close()
 
 
 bot = FihcoinBot()
