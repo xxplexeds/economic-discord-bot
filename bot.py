@@ -27,12 +27,10 @@ class EconomyProfileView(discord.ui.LayoutView):
         avatar_url: str,
         footer: str = "Fihcoin • Fish Coin",
         balance_sections: tuple[str, str, str] | None = None,
+        description_sections: tuple[str, str] | None = None,
     ) -> None:
         super().__init__(timeout=None)
-        if balance_sections is None:
-            profile_content = discord.ui.TextDisplay(f"## {heading}\n{description}")
-            content = []
-        else:
+        if balance_sections is not None:
             profile_content = discord.ui.TextDisplay(f"## {heading}")
             wallet_section, bank_section, total_section = balance_sections
             content = [
@@ -42,6 +40,17 @@ class EconomyProfileView(discord.ui.LayoutView):
                 discord.ui.Separator(),
                 discord.ui.TextDisplay(total_section),
             ]
+        elif description_sections is not None:
+            profile_content = discord.ui.TextDisplay(f"## {heading}")
+            intro_section, details_section = description_sections
+            content = [
+                discord.ui.TextDisplay(intro_section),
+                discord.ui.Separator(),
+                discord.ui.TextDisplay(details_section),
+            ]
+        else:
+            profile_content = discord.ui.TextDisplay(f"## {heading}\\n{description}")
+            content = []
 
         profile = discord.ui.Section(
             profile_content,
@@ -194,7 +203,11 @@ async def leaderboard(interaction: discord.Interaction) -> None:
     )
     view = EconomyProfileView(
         heading="Fihcoin Leaderboard",
-        description=f"Top 10 members ranked by wallet + bank balance.\n\n{description}",
+        description="",
+        description_sections=(
+            "Top 10 members ranked by wallet + bank balance.",
+            description,
+        ),
         avatar_url=avatar_url,
         footer="Fihcoin • Fish Coin • Rankings are server-specific",
     )
