@@ -26,15 +26,31 @@ class EconomyProfileView(discord.ui.LayoutView):
         description: str,
         avatar_url: str,
         footer: str = "Fihcoin • Fish Coin",
+        balance_sections: tuple[str, str, str] | None = None,
     ) -> None:
         super().__init__(timeout=None)
+        if balance_sections is None:
+            profile_content = discord.ui.TextDisplay(f"## {heading}\n{description}")
+            content = []
+        else:
+            profile_content = discord.ui.TextDisplay(f"## {heading}")
+            wallet_section, bank_section, total_section = balance_sections
+            content = [
+                discord.ui.TextDisplay(wallet_section),
+                discord.ui.Separator(),
+                discord.ui.TextDisplay(bank_section),
+                discord.ui.Separator(),
+                discord.ui.TextDisplay(total_section),
+            ]
+
         profile = discord.ui.Section(
-            discord.ui.TextDisplay(f"## {heading}\n{description}"),
+            profile_content,
             accessory=discord.ui.Thumbnail(media=avatar_url),
         )
         self.add_item(
             discord.ui.Container(
                 profile,
+                *content,
                 discord.ui.Separator(),
                 discord.ui.TextDisplay(footer),
             )
@@ -123,10 +139,11 @@ async def balance(
     total = wallet + bank
     view = EconomyProfileView(
         heading=f"{target.mention}'s Fihcoin Balance",
-        description=(
-            f"**Wallet**\n{wallet:,.2f} {FIHCOIN}\n\n"
-            f"**Bank**\n{bank:,.2f} {FIHCOIN}\n\n"
-            f"**Total**\n**{total:,.2f} {FIHCOIN}**"
+        description="",
+        balance_sections=(
+            f"**Wallet**\n{wallet:,.2f} {FIHCOIN}",
+            f"**Bank**\n{bank:,.2f} {FIHCOIN}",
+            f"**Total**\n**{total:,.2f} {FIHCOIN}**",
         ),
         avatar_url=target.display_avatar.url,
     )
