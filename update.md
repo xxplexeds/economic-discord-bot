@@ -39,9 +39,9 @@ This file records project decisions, implementation changes, and setup milestone
 - Expanded the roadmap and project overview to track these requirements.
 
 ### Status
-- These changes are on feature/admin-dashboard-foundation, based on the open PostgreSQL foundation PR. They are not merged, deployed, or live.
+- The admin foundation is merged into `main` and deployed with the PostgreSQL foundation. Its models/specifications are present; the user-facing admin features still require implementation.
 - OAuth login, authorization enforcement, block/unblock endpoints, audit UI, analytics, maintenance controls, Discord log delivery, and backup jobs still require implementation and testing.
-- PR #3 must be merged and deployed before Railway can create/use these additional model tables.
+- The deployed backend health check confirms PostgreSQL connectivity. The initial schema is created at service startup.
 
 ---
 
@@ -65,7 +65,7 @@ This file records project decisions, implementation changes, and setup milestone
 - The API returned a healthy response before the database-aware health check was merged/deployed.
 
 ### Follow-up
-- Merge/deploy PR #3 and verify /health reports database connected.
+- Verified after deployment: `/health` returns `{"status":"healthy","database":"connected"}`.
 - Add Alembic migrations before future production schema changes.
 - Implement economy commands, atomic balance operations, clans, shop, leaderboards, and website.
 
