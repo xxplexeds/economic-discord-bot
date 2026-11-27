@@ -1,5 +1,13 @@
 # Fihcoin Economic Bot — Update Log
 
+## 2026-11-27 — Balance profile and leaderboard UI refinements
+
+### Changed
+- Updated the leaderboard profile thumbnail to use the Discord server icon instead of the bot avatar. If the server has no icon, it falls back to the invoking member's avatar.
+- Updated the balance profile heading to use a Discord user mention for the selected member, while disabling mention notifications so it displays as a mention without pinging them.
+
+---
+
 ## 2026-11-27 — Balance profiles and leaderboard
 
 ### Added
