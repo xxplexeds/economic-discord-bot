@@ -1,5 +1,14 @@
 # Fihcoin Economic Bot — Update Log
 
+## 2026-11-27 — Add leaderboard section divider
+
+### Changed
+- Split the leaderboard title, Top 10 description, and member rankings into separate Components V2 sections with a native Discord Separator between the description and rankings.
+- Kept the server icon and silent clickable member mentions.
+
+---
+
+
 ## 2026-11-27 — Add balance section dividers
 
 ### Changed
