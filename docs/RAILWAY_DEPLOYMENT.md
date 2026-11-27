@@ -1,54 +1,55 @@
 # Railway Deployment Plan
 
-Railway is the intended hosting platform for Economic Bot.
+Railway is the selected hosting platform for Economic Bot. The project is designed for cloud-based development and deployment so the bot can continue running when the developer's personal computer is shut down or switched off.
 
-## Planned service layout
+## Confirmed stack
 
-The exact topology depends on the selected application stack. The expected logical services are:
+- **Discord bot:** Python + discord.py
+- **Backend API:** FastAPI
+- **Database:** PostgreSQL
+- **Website:** Next.js
 
-- **Bot service:** runs the Discord bot process.
-- **API service:** serves shared economy logic to the bot and website.
-- **Website service:** serves the member dashboard and administration interface.
-- **Database:** persistent storage, either a Railway-managed database or an external provider.
+## Planned Railway service layout
 
-These may be combined during early development if the chosen framework supports it cleanly. They should remain logically separated so they can be scaled and restarted independently later.
+- **Bot service:** runs `python bot.py`.
+- **API service:** runs `uvicorn api:app --host 0.0.0.0 --port $PORT`.
+- **Website service:** Next.js application (planned).
+- **Database:** Railway PostgreSQL service.
+
+The bot and API can use the same repository with separate Railway services and start commands. Keep their processes independent so they can be restarted and deployed separately.
 
 ## Environment variables
 
 Secrets must be stored in Railway Variables and must never be committed to Git.
 
-Expected configuration categories include:
+Initial configuration:
 
-- Discord bot token.
-- Discord application/client ID and OAuth client secret (when website login is implemented).
-- Database connection string.
-- API signing/session secret.
-- Public website URL.
-- API base URL.
-- Environment name and logging level.
+- `DISCORD_TOKEN` — Discord bot token, bot service only.
+- `DISCORD_GUILD_ID` — optional development server ID for fast guild command sync.
+- `DATABASE_URL` — PostgreSQL connection URL.
+- `PORT` — supplied by Railway for the API service.
 
-The final variable names will be documented after the stack is selected.
+Later configuration will include Discord OAuth credentials, session/signing secrets, public website URL, and API base URL.
 
 ## Deployment principles
 
 - Use separate development/staging and production environments where practical.
-- Pin dependencies and use a reproducible build/start command.
-- Add health checks for web services.
+- Pin dependencies and use reproducible start commands.
+- Add and verify health checks for web services.
 - Keep the bot process independent from web request workers.
-- Run database migrations or initialization steps safely and predictably.
+- Run database migrations safely and predictably.
 - Never print tokens, passwords, or full connection strings in logs.
-- Configure persistent storage for any service that requires local files; do not rely on an ephemeral container filesystem for durable data.
+- Do not rely on an ephemeral container filesystem for durable data.
 - Test graceful shutdown and restart behavior.
 
 ## Initial deployment sequence
 
-1. Select and implement the application stack.
-2. Add a local development setup and environment template without secrets.
-3. Connect the repository to a Railway project.
-4. Provision/configure the database.
-5. Deploy the API and verify its health endpoint.
-6. Deploy the Discord bot and verify gateway connection.
-7. Deploy the website and configure Discord OAuth after its callback URL is known.
-8. Verify that bot and website read and write the same test data.
+1. Connect the GitHub repository to a Railway project.
+2. Provision Railway PostgreSQL.
+3. Deploy the API and verify `/health`.
+4. Deploy the bot and verify its Discord gateway connection and `/ping` command.
+5. Implement database models and migrations.
+6. Deploy the website and configure Discord OAuth after its callback URL is known.
+7. Verify that the bot and website use the same economy data.
 
-No Railway services or credentials have been configured yet.
+The repository scaffold is prepared, but no Railway project, services, variables, or database have been configured yet.
