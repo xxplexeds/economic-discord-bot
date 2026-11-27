@@ -12,9 +12,11 @@ The Discord bot, website, and backend share one source of truth for balances, pe
 - Currency: **Fihcoins** (singular: **Fihcoin**, meaning Fish Coin).
 - Official emoji: <:fihcoin:1575710572907987064>.
 - Balances support two decimal places.
-- Banking and configurable taxes are planned; bank interest is excluded.
+- Personal account banking and configurable taxes are planned; bank interest is excluded.
 - No gambling mechanics.
-- Clans will have a shared treasury, roles, and leaderboards.
+- Shared server banks have a vault, capacity upgrades, and private owner approval
+  for member deposits and withdrawals. Upgrade costs come from the owner's
+  personal wallet; bank interest is not used.
 - Hosting: Railway.
 - Stack: Python + discord.py, FastAPI, PostgreSQL, and Next.js.
 
@@ -30,7 +32,7 @@ The same policy protects Discord management commands and website management APIs
 ## Economy-level blocks
 
 Blocking is an economy restriction, not a Discord server ban.
-- Blocked users cannot earn, receive, transfer, deposit, withdraw, purchase, or participate in clan economy actions.
+- Blocked users cannot earn, receive, transfer, deposit, withdraw, purchase, or participate in bank economy actions.
 - Enforcement occurs in shared backend logic, not only by hiding interface controls.
 - Existing balances and transaction history are preserved.
 - Unblocking restores eligibility without resetting account data.
@@ -39,7 +41,7 @@ Blocking is an economy restriction, not a Discord server ban.
 
 ## Website dashboard
 
-The planned Next.js website uses Discord OAuth2 and secure server-side sessions. It includes overview, economy analytics, member profiles, balances and history, economy administration, clan management, shop, leaderboards, access control, blocked users, audit logs, maintenance mode, logging configuration, and database backup history.
+The planned Next.js website uses Discord OAuth2 and secure server-side sessions. It includes overview, economy analytics, member profiles, balances and history, economy administration, bank management, shop, leaderboards, access control, blocked users, audit logs, maintenance mode, logging configuration, and database backup history.
 
 The dashboard and Discord bot use the same FastAPI business logic. Website-only authorization checks are insufficient.
 

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -62,7 +64,68 @@ async def initialize_database() -> None:
         # The bot and API may boot at the same time. Serialize the initial
         # create_all operation so they cannot race to create the same tables.
         await connection.execute(text("SELECT pg_advisory_xact_lock(68421057)"))
+        await connection.execute(
+            text(
+                """
+                DO $$
+                BEGIN
+                    IF to_regclass('clans') IS NOT NULL
+                       AND to_regclass('banks') IS NULL THEN
+                        ALTER TABLE clans RENAME TO banks;
+                    END IF;
+                    IF to_regclass('clan_memberships') IS NOT NULL
+                       AND to_regclass('bank_memberships') IS NULL THEN
+                        ALTER TABLE clan_memberships RENAME TO bank_memberships;
+                    END IF;
+                    IF to_regclass('clan_invites') IS NOT NULL
+                       AND to_regclass('bank_invites') IS NULL THEN
+                        ALTER TABLE clan_invites RENAME TO bank_invites;
+                    END IF;
+                END
+                $$;
+                """
+            )
+        )
         await connection.run_sync(Base.metadata.create_all)
+        await connection.execute(
+            text(
+                "ALTER TABLE banks "
+                "ADD COLUMN IF NOT EXISTS balance NUMERIC(20, 2) NOT NULL DEFAULT 0.00"
+            )
+        )
+        await connection.execute(
+            text(
+                "ALTER TABLE banks "
+                "ADD COLUMN IF NOT EXISTS upgrade_level INTEGER NOT NULL DEFAULT 1"
+            )
+        )
+        await connection.execute(
+            text(
+                """
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM pg_constraint
+                        WHERE conrelid = 'banks'::regclass
+                          AND conname = 'ck_bank_nonnegative_balance'
+                    ) THEN
+                        ALTER TABLE banks
+                        ADD CONSTRAINT ck_bank_nonnegative_balance CHECK (balance >= 0);
+                    END IF;
+                    IF NOT EXISTS (
+                        SELECT 1 FROM pg_constraint
+                        WHERE conrelid = 'banks'::regclass
+                          AND conname = 'ck_bank_upgrade_level'
+                    ) THEN
+                        ALTER TABLE banks
+                        ADD CONSTRAINT ck_bank_upgrade_level
+                        CHECK (upgrade_level BETWEEN 1 AND 10);
+                    END IF;
+                END
+                $$;
+                """
+            )
+        )
 
     logger.info("PostgreSQL connection verified; database schema is ready.")
 

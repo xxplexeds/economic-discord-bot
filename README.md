@@ -25,7 +25,7 @@ Official currency emoji: `<:fihcoin:1575710572907987064>`
 
 ## Database foundation
 
-The initial schema stores players, wallet/bank accounts, and economy transaction records. Balances use PostgreSQL `NUMERIC(20, 2)` and database constraints prevent negative balances. Both the bot and API verify the database connection and create missing initial tables during startup.
+The schema stores players, personal wallet/bank accounts, shared banks and vaults, and transaction records. Balances use PostgreSQL `NUMERIC(20, 2)` and database constraints prevent negative balances. Both the bot and API verify the database connection and create missing initial tables during startup; startup also renames legacy clan tables and applies additive migrations for existing shared-bank tables.
 
 See [docs/DATABASE.md](docs/DATABASE.md) for details. Versioned schema migrations will be added before future production schema changes.
 
@@ -50,4 +50,7 @@ Deploy the repository as separate Railway services:
 
 For both application services, a Railway reference such as `${{Postgres.DATABASE_URL}}` can be used when the database service is named `Postgres`.
 
-The actual economy commands, balance-changing operations, transaction service, clans, and website are not implemented yet.
+The `/bank` group supports shared server vaults, owner-approved member deposits
+and withdrawals, and owner-purchased storage upgrades. Shared bank funds are
+separate from each member's personal bank account; deposits and withdrawals
+move currency between the shared vault and the member's wallet.

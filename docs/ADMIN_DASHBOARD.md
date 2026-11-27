@@ -15,7 +15,7 @@ User and role grants are scoped to the configured Release 1 guild. The same poli
 
 Blocking is separate from Discord moderation. It does not kick, ban, timeout, or remove roles from a Discord member.
 
-A blocked user cannot earn or receive currency, send payments or transfers, deposit or withdraw, purchase from the shop, or participate in clan economy actions. Every restriction must be enforced in shared backend business logic so it applies equally to Discord and website actions.
+A blocked user cannot earn or receive currency, send payments or transfers, deposit or withdraw, purchase from the shop, or participate in bank economy actions. Every restriction must be enforced in shared backend business logic so it applies equally to Discord and website actions.
 
 Existing balances and transaction history are preserved. Unblocking restores eligibility without resetting account data. Each block/unblock action records the actor, target, reason, and timestamp. Management authorization is independent from economy blocked status; blocking an administrator does not silently revoke their dashboard access.
 

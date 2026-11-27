@@ -1,5 +1,20 @@
 # Fihcoin Economic Bot — Update Log
 
+## 2026-11-27 — Add shared bank vaults
+
+### Added
+- Added shared bank vault deposits and withdrawals, with immediate owner transactions and private owner DM approval for member requests.
+- Added private approval/decision notifications, restored persistent approval buttons for pending requests on startup, and cancel requests when the owner cannot receive DMs.
+- Added capacity upgrades starting at 100,000 Fihcoins, with 1.5x capacity and cost progression up to level 10.
+- Added owner wallet-funded upgrades, ownership transfer, and the empty-vault rule for disbanding.
+- Persisted vault balances, upgrade levels, requests, and bank transaction records; personal bank accounts remain separate.
+
+### Notes
+- Bank deposits and withdrawals are logged atomically with wallet changes and the shared vault balance.
+- `/bank shop`, `/bank upgrade`, `/bank deposit`, `/bank withdraw`, and `/bank transfer-owner` are available alongside membership commands.
+
+---
+
 ## 2026-11-27 — Add private transaction history
 
 ### Added
@@ -106,7 +121,7 @@ This file records project decisions, implementation changes, and setup milestone
 - Management access supports Discord Administrator permission, explicit Discord User ID grants, and explicit Discord Role ID grants.
 - Regular members retain access to regular economy commands; management authorization protects administrative actions.
 - Blocking is an economy-level restriction, not a Discord server ban.
-- Blocked users cannot earn, receive, transfer, deposit, withdraw, purchase, or use clan economy features.
+- Blocked users cannot earn, receive, transfer, deposit, withdraw, purchase, or use bank economy features.
 - Blocked users retain balances and transaction history; unblocking restores eligibility.
 - Management access is independent from economy blocked status.
 - Confirmed audit logs, economy analytics, maintenance mode, configurable Discord logging channels, and database backups.
@@ -148,7 +163,7 @@ This file records project decisions, implementation changes, and setup milestone
 ### Follow-up
 - Verified after deployment: `/health` returns `{"status":"healthy","database":"connected"}`.
 - Add Alembic migrations before future production schema changes.
-- Implement economy commands, atomic balance operations, clans, shop, leaderboards, and website.
+- Implement economy commands, atomic balance operations, banks, shop, leaderboards, and website.
 
 ---
 
@@ -168,7 +183,7 @@ This file records project decisions, implementation changes, and setup milestone
 - Official Fihcoin identity and emoji in project documentation.
 
 ### Not implemented yet
-- Economy commands beyond /ping, balance operations, taxes, transaction history, clans, shop, leaderboards, website, and Discord OAuth.
+- Economy commands beyond /ping, balance operations, taxes, transaction history, banks, shop, leaderboards, website, and Discord OAuth.
 
 ---
 
