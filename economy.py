@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import func, or_, select
@@ -51,6 +54,64 @@ async def get_or_create_balances(
                 balances.get("wallet", Decimal("0.00")),
                 balances.get("bank", Decimal("0.00")),
             )
+
+
+async def get_player_profile(
+    guild_id: int,
+    discord_user_id: int,
+) -> tuple[Decimal, Decimal, Decimal, int, datetime, int]:
+    """Return a member's balances, leaderboard rank, account age, and activity count."""
+    wallet, bank = await get_or_create_balances(guild_id, discord_user_id)
+    total = wallet + bank
+
+    async with session_scope() as session:
+        player = await session.scalar(
+            select(Player).where(
+                Player.guild_id == guild_id,
+                Player.discord_user_id == discord_user_id,
+            )
+        )
+        if player is None:
+            raise RuntimeError("Could not retrieve the player's economy profile.")
+
+        ranked_totals = (
+            select(
+                Player.id.label("player_id"),
+                func.sum(Account.balance).label("total_balance"),
+            )
+            .join(Account, Account.player_id == Player.id)
+            .where(Player.guild_id == guild_id)
+            .group_by(Player.id)
+            .subquery()
+        )
+        rank = int(
+            await session.scalar(
+                select(func.count())
+                .select_from(ranked_totals)
+                .where(ranked_totals.c.total_balance > total)
+            )
+            or 0
+        ) + 1
+
+        member_activity = or_(
+            EconomyTransaction.sender_discord_id == discord_user_id,
+            EconomyTransaction.recipient_discord_id == discord_user_id,
+        )
+        transaction_count = await session.scalar(
+            select(func.count(EconomyTransaction.id)).where(
+                EconomyTransaction.guild_id == guild_id,
+                member_activity,
+            )
+        )
+
+        return (
+            wallet,
+            bank,
+            total,
+            rank,
+            player.created_at,
+            int(transaction_count or 0),
+        )
 
 
 async def get_leaderboard_page(

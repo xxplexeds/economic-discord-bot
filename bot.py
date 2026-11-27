@@ -1,14 +1,38 @@
+from __future__ import annotations
+
 import logging
 import os
+from typing import Optional
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 
+from banks import (
+    BankDetails,
+    BankError,
+    BankRequestOutcome,
+    bank_capacity,
+    buy_bank_upgrade,
+    cancel_bank_request,
+    create_bank,
+    decide_bank_request,
+    disband_bank,
+    get_bank_details,
+    initiate_bank_transfer,
+    invite_to_bank,
+    leave_bank,
+    list_bank_invites,
+    next_bank_upgrade,
+    pending_bank_request_ids,
+    respond_to_bank_invite,
+    transfer_bank_ownership,
+)
 from database import close_database, initialize_database
 from economy import (
     get_leaderboard_page,
     get_or_create_balances,
+    get_player_profile,
     get_transaction_history_page,
     has_admin_history_access,
 )
@@ -21,6 +45,83 @@ logger = logging.getLogger("fihcoin.bot")
 FIHCOIN = "<:fihcoin:1575710572907987064>"
 
 
+class BankRequestView(discord.ui.View):
+    """Persistent approval controls delivered only to the current bank owner by DM."""
+
+    def __init__(self, request_id) -> None:
+        super().__init__(timeout=None)
+        self.request_id = request_id
+        approve = discord.ui.Button(
+            label="Approve",
+            style=discord.ButtonStyle.success,
+            custom_id=f"bank_request:{request_id}:approve",
+        )
+        decline = discord.ui.Button(
+            label="Decline",
+            style=discord.ButtonStyle.danger,
+            custom_id=f"bank_request:{request_id}:decline",
+        )
+        approve.callback = self.approve
+        decline.callback = self.decline
+        self.add_item(approve)
+        self.add_item(decline)
+
+    async def approve(self, interaction: discord.Interaction) -> None:
+        await self._resolve(interaction, approve=True)
+
+    async def decline(self, interaction: discord.Interaction) -> None:
+        await self._resolve(interaction, approve=False)
+
+    async def _resolve(self, interaction: discord.Interaction, *, approve: bool) -> None:
+        await interaction.response.defer()
+        try:
+            outcome = await decide_bank_request(
+                self.request_id,
+                interaction.user.id,
+                approve=approve,
+            )
+        except BankError as error:
+            await interaction.followup.send(str(error), ephemeral=True)
+            return
+        except Exception:
+            logger.exception("Failed to process bank request %s", self.request_id)
+            await interaction.followup.send(
+                "I couldn't process that request. Please try again.",
+                ephemeral=True,
+            )
+            return
+
+        decision = {
+            "approved": "approved",
+            "declined": "declined",
+            "failed": "could not be completed",
+            "cancelled": "cancelled",
+        }.get(outcome.status, "resolved")
+        result_message = (
+            f"Bank request {decision}: {outcome.message}\n"
+            f"Bank: **{discord.utils.escape_markdown(outcome.bank_name)}**\n"
+            f"Action: **{outcome.action.title()} {outcome.amount:,.2f} {FIHCOIN}**"
+        )
+        await _notify_bank_requester(outcome)
+        try:
+            await interaction.edit_original_response(
+                content=result_message,
+                embed=None,
+                view=None,
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+        except discord.HTTPException:
+            logger.exception(
+                "Could not update bank request message %s after resolution",
+                self.request_id,
+            )
+            await interaction.followup.send(
+                "The request decision was recorded and the requester was notified, "
+                "but I could not update this message.",
+                ephemeral=True,
+            )
+
+
 class EconomyProfileView(discord.ui.LayoutView):
     """Components V2 profile layout with the member or server icon in its accessory."""
 
@@ -30,7 +131,7 @@ class EconomyProfileView(discord.ui.LayoutView):
         heading: str,
         description: str,
         avatar_url: str,
-        footer: str = "Fihcoin • Fish Coin",
+        footer: str = f"{FIHCOIN} • Fihcoin • Fish Coin",
         balance_sections: tuple[str, str, str] | None = None,
         description_sections: tuple[str, str] | None = None,
     ) -> None:
@@ -128,6 +229,7 @@ class LeaderboardView(discord.ui.LayoutView):
         self,
         *,
         guild_id: int,
+        guild_name: str,
         avatar_url: str,
         entries: list[tuple[int, object]],
         total_count: int,
@@ -135,6 +237,7 @@ class LeaderboardView(discord.ui.LayoutView):
     ) -> None:
         super().__init__(timeout=900)
         self.guild_id = guild_id
+        self.guild_name = guild_name
         self.avatar_url = avatar_url
         self.entries = entries
         self.total_count = total_count
@@ -157,26 +260,26 @@ class LeaderboardView(discord.ui.LayoutView):
                 lines.append(
                     f"{marker} <@{member_id}> — **{total_balance:,.2f} {FIHCOIN}**"
                 )
-            rankings = "\\n".join(lines)
+            rankings = "\n".join(lines)
 
         profile = discord.ui.Section(
-            discord.ui.TextDisplay("## Fihcoin Leaderboard"),
+            discord.ui.TextDisplay(f"## 🏆 Fihcoin Leaderboard\n-# {self.guild_name}"),
             accessory=discord.ui.Thumbnail(media=self.avatar_url),
         )
         self.add_item(
             discord.ui.Container(
                 profile,
-                discord.ui.TextDisplay("Top 10 members ranked by wallet + bank balance."),
+                discord.ui.TextDisplay("-# Ranked by combined wallet + bank balance"),
                 discord.ui.Separator(),
                 discord.ui.TextDisplay(rankings),
                 discord.ui.Separator(),
                 discord.ui.TextDisplay(
-                    f"Page **{self.current_page}** of **{self.total_pages}**"
-                    f" • {self.total_count:,} members"
+                    f"-# Page {self.current_page} of {self.total_pages}"
+                    f" • {self.total_count:,} ranked members"
                 ),
                 discord.ui.Separator(),
                 discord.ui.TextDisplay(
-                    "Fihcoin • Fish Coin • Rankings are server-specific"
+                    f"{FIHCOIN} • Fihcoin • Rankings are server-specific"
                 ),
             )
         )
@@ -454,6 +557,10 @@ class FihcoinBot(commands.Bot):
     async def setup_hook(self) -> None:
         await initialize_database()
         logger.info("PostgreSQL is ready.")
+        pending_requests = await pending_bank_request_ids()
+        for request_id in pending_requests:
+            self.add_view(BankRequestView(request_id))
+        logger.info("Restored %s pending bank approval views", len(pending_requests))
 
         guild_id = os.getenv("DISCORD_GUILD_ID")
         if guild_id:
@@ -473,6 +580,500 @@ class FihcoinBot(commands.Bot):
 
 
 bot = FihcoinBot()
+bank_group = app_commands.Group(
+    name="bank",
+    description="Create and manage server banks.",
+)
+
+
+def bank_details_view(guild: discord.Guild, details: BankDetails) -> discord.ui.LayoutView:
+    bank = details.bank
+    capacity = bank_capacity(bank.upgrade_level)
+    member_mentions = [f"<@{member_id}>" for member_id in details.member_discord_ids]
+    member_text = ", ".join(member_mentions) or "No members"
+    if details.member_count > len(member_mentions):
+        member_text += f" … and {details.member_count - len(member_mentions)} more"
+    owner = f"<@{bank.owner_discord_id}>"
+    view = discord.ui.LayoutView(timeout=None)
+    view.add_item(
+        discord.ui.Container(
+            discord.ui.TextDisplay(
+                f"## 🏰 {discord.utils.escape_markdown(bank.name)}\n"
+                f"-# {discord.utils.escape_markdown(guild.name)}"
+            ),
+            discord.ui.Separator(),
+            discord.ui.TextDisplay(
+                f"**Owner:** {owner}\n"
+                f"**Members ({details.member_count:,}):** {member_text}\n"
+                f"**Vault:** {bank.balance:,.2f} {FIHCOIN} / {capacity:,.2f} {FIHCOIN}\n"
+                f"**Storage level:** {bank.upgrade_level}"
+            ),
+            discord.ui.Separator(),
+            discord.ui.TextDisplay("Banks are server-specific"),
+            accent_colour=0x7C3AED,
+        )
+    )
+    return view
+
+
+async def _notify_bank_requester(outcome: BankRequestOutcome) -> None:
+    if outcome.status == "approved":
+        status = "approved"
+    elif outcome.status == "declined":
+        status = "declined"
+    elif outcome.status == "failed":
+        status = "could not be completed"
+    else:
+        status = "cancelled"
+    message = (
+        f"Your {outcome.action} request for **{discord.utils.escape_markdown(outcome.bank_name)}** "
+        f"({outcome.amount:,.2f} {FIHCOIN}) was {status}. {outcome.message}"
+    )
+    try:
+        requester = bot.get_user(outcome.requester_discord_id)
+        if requester is None:
+            requester = await bot.fetch_user(outcome.requester_discord_id)
+        await requester.send(message, allowed_mentions=discord.AllowedMentions.none())
+    except discord.HTTPException:
+        logger.warning(
+            "Could not DM requester %s about bank request status %s",
+            outcome.requester_discord_id,
+            outcome.status,
+        )
+
+
+@bank_group.command(name="create", description="Create a bank in this server.")
+@app_commands.guild_only()
+@app_commands.describe(name="A unique bank name, 2–32 characters.")
+async def bank_create(interaction: discord.Interaction, name: str) -> None:
+    if interaction.guild is None:
+        await interaction.response.send_message("Banks are only available in a server.")
+        return
+    await interaction.response.defer(thinking=True)
+    try:
+        bank = await create_bank(interaction.guild.id, interaction.user.id, name)
+    except BankError as error:
+        await interaction.followup.send(str(error))
+        return
+    except Exception:
+        logger.exception("Failed to create bank for user %s", interaction.user.id)
+        await interaction.followup.send("I couldn't create that bank right now. Please try again.")
+        return
+    await interaction.followup.send(
+        f"🏰 **{discord.utils.escape_markdown(bank.name)}** was created. You are its owner."
+    )
+
+
+@bank_group.command(name="invite", description="Invite a member to the bank you own.")
+@app_commands.guild_only()
+@app_commands.describe(member="The server member to invite.")
+async def bank_invite(interaction: discord.Interaction, member: discord.Member) -> None:
+    if interaction.guild is None:
+        await interaction.response.send_message("Banks are only available in a server.")
+        return
+    await interaction.response.defer(thinking=True)
+    try:
+        bank_name = await invite_to_bank(interaction.guild.id, interaction.user.id, member.id)
+    except BankError as error:
+        await interaction.followup.send(str(error))
+        return
+    except Exception:
+        logger.exception("Failed to create bank invite for user %s", member.id)
+        await interaction.followup.send("I couldn't send that bank invite right now. Please try again.")
+        return
+    await interaction.followup.send(
+        f"🏰 <@{member.id}> was invited to **{discord.utils.escape_markdown(bank_name)}**. "
+        f"They can use `/bank invites`, then `/bank accept` or `/bank decline`."
+    )
+
+
+@bank_group.command(name="invites", description="View your pending bank invitations.")
+@app_commands.guild_only()
+async def bank_invites(interaction: discord.Interaction) -> None:
+    if interaction.guild is None:
+        await interaction.response.send_message("Banks are only available in a server.")
+        return
+    await interaction.response.defer(thinking=True)
+    try:
+        invites = await list_bank_invites(interaction.guild.id, interaction.user.id)
+    except Exception:
+        logger.exception("Failed to retrieve bank invites for user %s", interaction.user.id)
+        await interaction.followup.send("I couldn't retrieve your bank invites right now.")
+        return
+    if not invites:
+        await interaction.followup.send("You have no pending bank invitations.")
+        return
+    lines = [
+        f"• **{discord.utils.escape_markdown(invite.bank_name)}** — invited by "
+        f"<@{invite.inviter_discord_id}> (<t:{int(invite.created_at.timestamp())}:R>)"
+        for invite in invites
+    ]
+    await interaction.followup.send("## 🏰 Your bank invitations\n" + "\n".join(lines))
+
+
+async def _bank_invite_decision(
+    interaction: discord.Interaction,
+    bank_name: str,
+    *,
+    accept: bool,
+) -> None:
+    if interaction.guild is None:
+        await interaction.response.send_message("Banks are only available in a server.")
+        return
+    await interaction.response.defer(thinking=True)
+    try:
+        resolved_name = await respond_to_bank_invite(
+            interaction.guild.id,
+            interaction.user.id,
+            bank_name,
+            accept=accept,
+        )
+    except BankError as error:
+        await interaction.followup.send(str(error))
+        return
+    except Exception:
+        logger.exception("Failed to respond to bank invite for user %s", interaction.user.id)
+        await interaction.followup.send("I couldn't process that bank invite right now.")
+        return
+    if accept:
+        await interaction.followup.send(
+            f"🏰 You joined **{discord.utils.escape_markdown(resolved_name)}**."
+        )
+    else:
+        await interaction.followup.send(
+            f"You declined the invitation to **{discord.utils.escape_markdown(resolved_name)}**."
+        )
+
+
+@bank_group.command(name="accept", description="Accept an invitation to a bank.")
+@app_commands.guild_only()
+@app_commands.describe(bank_name="The bank name shown by `/bank invites`.")
+async def bank_accept(interaction: discord.Interaction, bank_name: str) -> None:
+    await _bank_invite_decision(interaction, bank_name, accept=True)
+
+
+@bank_group.command(name="decline", description="Decline an invitation to a bank.")
+@app_commands.guild_only()
+@app_commands.describe(bank_name="The bank name shown by `/bank invites`.")
+async def bank_decline(interaction: discord.Interaction, bank_name: str) -> None:
+    await _bank_invite_decision(interaction, bank_name, accept=False)
+
+
+@bank_group.command(name="view", description="View your bank or look up a bank by name.")
+@app_commands.guild_only()
+@app_commands.describe(bank_name="Optional bank name to look up.")
+async def bank_view(
+    interaction: discord.Interaction,
+    bank_name: Optional[str] = None,
+) -> None:
+    if interaction.guild is None:
+        await interaction.response.send_message("Banks are only available in a server.")
+        return
+    await interaction.response.defer(thinking=True)
+    try:
+        details = await get_bank_details(interaction.guild.id, interaction.user.id, bank_name)
+    except BankError as error:
+        await interaction.followup.send(str(error))
+        return
+    except Exception:
+        logger.exception("Failed to retrieve bank details in guild %s", interaction.guild.id)
+        await interaction.followup.send("I couldn't retrieve that bank right now.")
+        return
+    if details is None:
+        message = (
+            f"No bank named **{discord.utils.escape_markdown(bank_name)}** exists in this server."
+            if bank_name
+            else "You are not in a bank yet. Create one with `/bank create` or view a bank by name."
+        )
+        await interaction.followup.send(message)
+        return
+    await interaction.followup.send(
+        view=bank_details_view(interaction.guild, details),
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
+
+
+async def _request_bank_transfer(
+    interaction: discord.Interaction,
+    action: str,
+    amount: str,
+) -> None:
+    if interaction.guild is None:
+        await interaction.response.send_message(
+            "Banks are only available in a server.",
+            ephemeral=True,
+        )
+        return
+    await interaction.response.defer(ephemeral=True, thinking=True)
+    try:
+        outcome = await initiate_bank_transfer(
+            interaction.guild.id,
+            interaction.user.id,
+            action,
+            amount,
+        )
+    except BankError as error:
+        await interaction.followup.send(str(error), ephemeral=True)
+        return
+    except Exception:
+        logger.exception(
+            "Failed to process bank %s for user %s",
+            action,
+            interaction.user.id,
+        )
+        await interaction.followup.send(
+            f"I couldn't process that {action} right now. Please try again.",
+            ephemeral=True,
+        )
+        return
+
+    if outcome.request_id is None:
+        if outcome.balance_after is None:
+            logger.error(
+                "Bank %s completed without a resulting balance for user %s",
+                action,
+                interaction.user.id,
+            )
+            await interaction.followup.send(
+                "Your transaction completed, but I couldn't retrieve the updated vault balance.",
+                ephemeral=True,
+            )
+            return
+        await interaction.followup.send(
+            f"Your {action} of **{outcome.amount:,.2f} {FIHCOIN}** "
+            f"was completed. The bank vault now holds **{outcome.balance_after:,.2f} "
+            f"{FIHCOIN}**.",
+            ephemeral=True,
+        )
+        return
+
+    try:
+        owner = bot.get_user(outcome.owner_discord_id)
+        if owner is None:
+            owner = await bot.fetch_user(outcome.owner_discord_id)
+        request_view = BankRequestView(outcome.request_id)
+        await owner.send(
+            embed=discord.Embed(
+                title=f"Bank {action} approval",
+                description=(
+                    f"<@{interaction.user.id}> requests to **{action}** "
+                    f"**{outcome.amount:,.2f} {FIHCOIN}** "
+                    f"{'into' if action == 'deposit' else 'from'} "
+                    f"**{discord.utils.escape_markdown(outcome.bank_name)}**."
+                ),
+                colour=discord.Colour.gold(),
+            ),
+            view=request_view,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+    except discord.HTTPException:
+        logger.warning(
+            "Could not DM bank owner %s about request %s",
+            outcome.owner_discord_id,
+            outcome.request_id,
+        )
+        cancelled = True
+        try:
+            await cancel_bank_request(outcome.request_id)
+        except Exception:
+            cancelled = False
+            logger.exception(
+                "Could not cancel undelivered bank request %s",
+                outcome.request_id,
+            )
+        if cancelled:
+            await interaction.followup.send(
+                "I couldn't DM the bank owner, so the request was cancelled. "
+                "The owner may need to enable direct messages from server members.",
+                ephemeral=True,
+            )
+        else:
+            await interaction.followup.send(
+                "I couldn't DM the bank owner, and could not confirm cancellation. "
+                "The request may still be pending; please contact the bank owner "
+                "before submitting another request.",
+                ephemeral=True,
+            )
+        return
+
+    await interaction.followup.send(
+        f"Your {action} request for **{outcome.amount:,.2f} {FIHCOIN}** "
+        f"was sent privately to the bank owner for approval.",
+        ephemeral=True,
+    )
+
+
+@bank_group.command(name="deposit", description="Deposit currency into your bank.")
+@app_commands.guild_only()
+@app_commands.describe(amount="Amount to deposit, with up to two decimal places.")
+async def bank_deposit(interaction: discord.Interaction, amount: str) -> None:
+    await _request_bank_transfer(interaction, "deposit", amount)
+
+
+@bank_group.command(name="withdraw", description="Withdraw currency from your bank.")
+@app_commands.guild_only()
+@app_commands.describe(amount="Amount to withdraw, with up to two decimal places.")
+async def bank_withdraw(interaction: discord.Interaction, amount: str) -> None:
+    await _request_bank_transfer(interaction, "withdraw", amount)
+
+
+@bank_group.command(name="shop", description="View available bank storage upgrades.")
+@app_commands.guild_only()
+async def bank_shop(interaction: discord.Interaction) -> None:
+    if interaction.guild is None:
+        await interaction.response.send_message(
+            "Banks are only available in a server.",
+            ephemeral=True,
+        )
+        return
+    await interaction.response.defer(ephemeral=True, thinking=True)
+    try:
+        details = await get_bank_details(interaction.guild.id, interaction.user.id)
+    except Exception:
+        logger.exception("Failed to load bank shop for user %s", interaction.user.id)
+        await interaction.followup.send("I couldn't load the bank shop right now.", ephemeral=True)
+        return
+    if details is None:
+        await interaction.followup.send(
+            "Join a bank before viewing its storage upgrades.",
+            ephemeral=True,
+        )
+        return
+
+    bank = details.bank
+    capacity = bank_capacity(bank.upgrade_level)
+    upgrade = next_bank_upgrade(bank.upgrade_level)
+    if upgrade is None:
+        upgrade_text = "This bank has reached the maximum storage level."
+    else:
+        next_level, next_capacity, cost = upgrade
+        upgrade_text = (
+            f"**Next upgrade:** Level {next_level}\n"
+            f"**New capacity:** {next_capacity:,.2f} {FIHCOIN}\n"
+            f"**Price:** {cost:,.2f} {FIHCOIN} from the owner's wallet\n"
+            f"Purchase with `/bank upgrade`."
+        )
+    await interaction.followup.send(
+        f"## 🏦 {discord.utils.escape_markdown(bank.name)} Bank Shop\n"
+        f"**Current level:** {bank.upgrade_level}/{10}\n"
+        f"**Vault:** {bank.balance:,.2f} / {capacity:,.2f} {FIHCOIN}\n\n"
+        f"{upgrade_text}\n\n"
+        f"Only the bank owner can purchase upgrades.",
+        ephemeral=True,
+    )
+
+
+@bank_group.command(name="upgrade", description="Buy the next bank storage upgrade.")
+@app_commands.guild_only()
+async def bank_upgrade(interaction: discord.Interaction) -> None:
+    if interaction.guild is None:
+        await interaction.response.send_message(
+            "Banks are only available in a server.",
+            ephemeral=True,
+        )
+        return
+    await interaction.response.defer(ephemeral=True, thinking=True)
+    try:
+        bank_name, level, capacity, cost = await buy_bank_upgrade(
+            interaction.guild.id,
+            interaction.user.id,
+        )
+    except BankError as error:
+        await interaction.followup.send(str(error), ephemeral=True)
+        return
+    except Exception:
+        logger.exception("Failed to buy bank upgrade for user %s", interaction.user.id)
+        await interaction.followup.send("I couldn't purchase that upgrade right now.", ephemeral=True)
+        return
+    await interaction.followup.send(
+        f"🏦 **{discord.utils.escape_markdown(bank_name)}** upgraded to level **{level}/10**. "
+        f"Capacity is now **{capacity:,.2f} {FIHCOIN}**. "
+        f"Paid **{cost:,.2f} {FIHCOIN}** from your wallet.",
+        ephemeral=True,
+    )
+
+
+@bank_group.command(name="transfer-owner", description="Transfer your bank to a current member.")
+@app_commands.guild_only()
+@app_commands.describe(member="The current bank member who will become the owner.")
+async def bank_transfer_owner(interaction: discord.Interaction, member: discord.Member) -> None:
+    if interaction.guild is None:
+        await interaction.response.send_message(
+            "Banks are only available in a server.",
+            ephemeral=True,
+        )
+        return
+    await interaction.response.defer(ephemeral=True, thinking=True)
+    try:
+        bank_name = await transfer_bank_ownership(
+            interaction.guild.id,
+            interaction.user.id,
+            member.id,
+        )
+    except BankError as error:
+        await interaction.followup.send(str(error), ephemeral=True)
+        return
+    except Exception:
+        logger.exception("Failed to transfer bank ownership for user %s", interaction.user.id)
+        await interaction.followup.send("I couldn't transfer ownership right now.", ephemeral=True)
+        return
+    await interaction.followup.send(
+        f"**{discord.utils.escape_markdown(bank_name)}** is now owned by <@{member.id}>. "
+        "You can leave the bank with `/bank leave`.",
+        ephemeral=True,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
+
+
+@bank_group.command(name="leave", description="Leave your current bank.")
+@app_commands.guild_only()
+async def bank_leave(interaction: discord.Interaction) -> None:
+    if interaction.guild is None:
+        await interaction.response.send_message("Banks are only available in a server.")
+        return
+    await interaction.response.defer(thinking=True)
+    try:
+        bank_name = await leave_bank(interaction.guild.id, interaction.user.id)
+    except BankError as error:
+        await interaction.followup.send(str(error))
+        return
+    except Exception:
+        logger.exception("Failed to remove user %s from their bank", interaction.user.id)
+        await interaction.followup.send("I couldn't remove you from your bank right now.")
+        return
+    await interaction.followup.send(
+        f"You left **{discord.utils.escape_markdown(bank_name)}**."
+    )
+
+
+@bank_group.command(name="disband", description="Disband the bank you own.")
+@app_commands.guild_only()
+@app_commands.describe(confirmation_name="Type your bank's exact name to confirm.")
+async def bank_disband(interaction: discord.Interaction, confirmation_name: str) -> None:
+    if interaction.guild is None:
+        await interaction.response.send_message("Banks are only available in a server.")
+        return
+    await interaction.response.defer(thinking=True)
+    try:
+        bank_name = await disband_bank(
+            interaction.guild.id,
+            interaction.user.id,
+            confirmation_name,
+        )
+    except BankError as error:
+        await interaction.followup.send(str(error))
+        return
+    except Exception:
+        logger.exception("Failed to disband bank for user %s", interaction.user.id)
+        await interaction.followup.send("I couldn't disband that bank right now.")
+        return
+    await interaction.followup.send(
+        f"🏰 **{discord.utils.escape_markdown(bank_name)}** was disbanded. "
+        "Its members and pending invites were removed."
+    )
+
+
+bot.tree.add_command(bank_group)
 
 
 @bot.event
@@ -498,7 +1099,7 @@ async def ping(interaction: discord.Interaction) -> None:
 @app_commands.describe(user="The server member whose balance you want to view.")
 async def balance(
     interaction: discord.Interaction,
-    user: discord.Member | None = None,
+    user: Optional[discord.Member] = None,
 ) -> None:
     if interaction.guild is None:
         await interaction.response.send_message(
@@ -532,6 +1133,64 @@ async def balance(
             f"**Total**\n**{total:,.2f} {FIHCOIN}**",
         ),
         avatar_url=target.display_avatar.url,
+    )
+    await interaction.followup.send(
+        view=view,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
+
+
+@bot.tree.command(
+    name="profile",
+    description="View your Fihcoin profile or look up another server member.",
+)
+@app_commands.guild_only()
+@app_commands.describe(user="The server member whose profile you want to view.")
+async def profile(
+    interaction: discord.Interaction,
+    user: Optional[discord.Member] = None,
+) -> None:
+    if interaction.guild is None:
+        await interaction.response.send_message(
+            "The Fihcoin economy is only available in the configured server.",
+            ephemeral=True,
+        )
+        return
+
+    target = user or interaction.user
+    await interaction.response.defer(thinking=True)
+
+    try:
+        wallet, bank, total, rank, created_at, transaction_count = await get_player_profile(
+            guild_id=interaction.guild.id,
+            discord_user_id=target.id,
+        )
+    except Exception:
+        logger.exception("Failed to retrieve Fihcoin profile for Discord user %s", target.id)
+        await interaction.followup.send(
+            "I couldn't retrieve that profile right now. Please try again shortly."
+        )
+        return
+
+    account_created = (
+        f"<t:{int(created_at.timestamp())}:D>"
+        if created_at is not None
+        else "Unavailable"
+    )
+    view = EconomyProfileView(
+        heading=f"🎃 {target.display_name}'s Fihcoin Profile",
+        description="",
+        description_sections=(
+            f"**Member:** {target.mention}\n"
+            f"**Account created:** {account_created}",
+            f"**Wallet:** {wallet:,.2f} {FIHCOIN}\n"
+            f"**Bank:** {bank:,.2f} {FIHCOIN}\n"
+            f"**Total:** **{total:,.2f} {FIHCOIN}**\n"
+            f"**Leaderboard rank:** #{rank:,}\n"
+            f"**Transactions:** {transaction_count:,}",
+        ),
+        avatar_url=target.display_avatar.url,
+        footer=f"{FIHCOIN} • Fihcoin • Rankings are server-specific",
     )
     await interaction.followup.send(
         view=view,
@@ -577,6 +1236,7 @@ async def leaderboard(interaction: discord.Interaction) -> None:
     )
     view = LeaderboardView(
         guild_id=interaction.guild.id,
+        guild_name=interaction.guild.name,
         avatar_url=avatar_url,
         entries=entries,
         total_count=total_count,
@@ -595,7 +1255,7 @@ async def leaderboard(interaction: discord.Interaction) -> None:
 @app_commands.describe(user="The member whose history you want to inspect (administrators only).")
 async def transactions(
     interaction: discord.Interaction,
-    user: discord.Member | None = None,
+    user: Optional[discord.Member] = None,
 ) -> None:
     if interaction.guild is None:
         await interaction.response.send_message(

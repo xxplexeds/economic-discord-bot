@@ -68,10 +68,11 @@ This roadmap separates confirmed decisions from implemented functionality. A che
 - [ ] Analytics, maintenance, logging, audit logs, and backup management.
 - [ ] Responsive desktop/mobile layout.
 
-## Phase 8 — Clans and other economy features
+## Phase 8 — Banks and other economy features
 
-- [ ] Clan lifecycle, membership, roles, and shared treasury.
-- [ ] Clan history and leaderboards.
+- [x] Bank creation, invitations, membership, and ownership transfers.
+- [x] Shared vault deposits and withdrawals with private owner approval.
+- [x] Owner-purchased storage capacity upgrades and empty-vault disbanding.
 - [ ] Shop and other approved non-gambling features.
 
 ## Phase 9 — Production readiness

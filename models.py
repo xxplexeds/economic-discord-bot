@@ -1,9 +1,12 @@
+from __future__ import annotations
+
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from typing import Optional
 
 from sqlalchemy import (
-    BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Index,
+    BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer,
     JSON, Numeric, String, UniqueConstraint, func,
 )
 from sqlalchemy.dialects.postgresql import UUID
@@ -23,6 +26,124 @@ class Player(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     discord_user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class Bank(Base):
+    __tablename__ = "banks"
+    __table_args__ = (
+        UniqueConstraint("guild_id", "normalized_name", name="uq_bank_guild_name"),
+        UniqueConstraint("guild_id", "owner_discord_id", name="uq_bank_guild_owner"),
+        CheckConstraint("balance >= 0", name="ck_bank_nonnegative_balance"),
+        CheckConstraint("upgrade_level BETWEEN 1 AND 10", name="ck_bank_upgrade_level"),
+        Index("ix_banks_guild_created", "guild_id", "created_at"),
+    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    name: Mapped[str] = mapped_column(String(32), nullable=False)
+    normalized_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    owner_discord_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    balance: Mapped[Decimal] = mapped_column(
+        Numeric(20, 2),
+        nullable=False,
+        default=Decimal("0.00"),
+        server_default="0.00",
+    )
+    upgrade_level: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class BankMembership(Base):
+    __tablename__ = "bank_memberships"
+    __table_args__ = (
+        UniqueConstraint("guild_id", "discord_user_id", name="uq_bank_member_guild_user"),
+        UniqueConstraint("bank_id", "discord_user_id", name="uq_bank_member_bank_user"),
+        Index("ix_bank_memberships_bank_joined", "bank_id", "joined_at"),
+    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    bank_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("banks.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    discord_user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class BankInvite(Base):
+    __tablename__ = "bank_invites"
+    __table_args__ = (
+        UniqueConstraint("guild_id", "bank_id", "invitee_discord_id", name="uq_bank_invite_target"),
+        CheckConstraint(
+            "status IN ('pending', 'accepted', 'declined', 'cancelled')",
+            name="ck_bank_invite_status",
+        ),
+        Index("ix_bank_invites_guild_invitee_status", "guild_id", "invitee_discord_id", "status"),
+    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    bank_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("banks.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    inviter_discord_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    invitee_discord_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending", server_default="pending")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class BankRequest(Base):
+    __tablename__ = "bank_requests"
+    __table_args__ = (
+        CheckConstraint("action IN ('deposit', 'withdraw')", name="ck_bank_request_action"),
+        CheckConstraint(
+            "status IN ('pending', 'approved', 'declined', 'cancelled', 'failed')",
+            name="ck_bank_request_status",
+        ),
+        CheckConstraint("amount > 0", name="ck_bank_request_positive_amount"),
+        Index("ix_bank_requests_bank_status_created", "bank_id", "status", "created_at"),
+    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    bank_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("banks.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    requester_discord_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    action: Mapped[str] = mapped_column(String(16), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(20, 2), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending", server_default="pending")
+    reviewer_discord_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    responded_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class BankTransaction(Base):
+    __tablename__ = "bank_transactions"
+    __table_args__ = (
+        CheckConstraint(
+            "action IN ('deposit', 'withdraw', 'upgrade', 'ownership_transfer')",
+            name="ck_bank_transaction_action",
+        ),
+        CheckConstraint("amount >= 0", name="ck_bank_transaction_nonnegative_amount"),
+        CheckConstraint("balance_after >= 0", name="ck_bank_transaction_nonnegative_balance"),
+        Index("ix_bank_transactions_bank_created", "bank_id", "created_at"),
+    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    bank_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("banks.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    actor_discord_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(20, 2), nullable=False)
+    balance_after: Mapped[Decimal] = mapped_column(Numeric(20, 2), nullable=False)
+    note: Mapped[Optional[str]] = mapped_column(String(250), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
@@ -53,13 +174,13 @@ class EconomyTransaction(Base):
     )
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    actor_discord_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    sender_discord_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    recipient_discord_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    actor_discord_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    sender_discord_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    recipient_discord_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     transaction_type: Mapped[str] = mapped_column(String(32), nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(20, 2), nullable=False)
     fee: Mapped[Decimal] = mapped_column(Numeric(20, 2), nullable=False, default=Decimal("0.00"), server_default="0.00")
-    note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    note: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
@@ -101,8 +222,8 @@ class BlockedUser(Base):
     blocked_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
     blocked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
-    unblocked_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    unblocked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    unblocked_by: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    unblocked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class AdminAuditLog(Base):
@@ -115,11 +236,11 @@ class AdminAuditLog(Base):
     )
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    actor_discord_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    actor_discord_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     action: Mapped[str] = mapped_column(String(80), nullable=False)
-    target_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
-    target_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    details: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    target_type: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    target_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    details: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
@@ -133,7 +254,7 @@ class GuildSettings(Base):
         default="Fihcoin is temporarily under maintenance. Please try again later.",
         server_default="Fihcoin is temporarily under maintenance. Please try again later.",
     )
-    updated_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    updated_by: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
 
@@ -146,7 +267,7 @@ class LogChannelConfig(Base):
     event_type: Mapped[str] = mapped_column(String(48), nullable=False)
     channel_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
-    updated_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    updated_by: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
 
@@ -157,9 +278,9 @@ class BackupRecord(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     status: Mapped[str] = mapped_column(String(24), nullable=False)
     storage_provider: Mapped[str] = mapped_column(String(40), nullable=False)
-    object_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    checksum: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    created_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    object_key: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    size_bytes: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    checksum: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    created_by: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
