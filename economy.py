@@ -53,15 +53,23 @@ async def get_or_create_balances(
             )
 
 
-async def get_leaderboard(
+async def get_leaderboard_page(
     guild_id: int,
+    *,
     limit: int = 10,
-) -> list[tuple[int, Decimal]]:
-    """Return members ranked by combined wallet and bank balance."""
+    offset: int = 0,
+) -> tuple[list[tuple[int, Decimal]], int]:
+    """Return one leaderboard page and the total number of ranked members."""
     from sqlalchemy import func
 
     safe_limit = max(1, min(limit, 25))
+    safe_offset = max(0, offset)
     async with session_scope() as session:
+        total_count = await session.scalar(
+            select(func.count(func.distinct(Player.id)))
+            .join(Account, Account.player_id == Player.id)
+            .where(Player.guild_id == guild_id)
+        )
         result = await session.execute(
             select(
                 Player.discord_user_id,
@@ -75,8 +83,10 @@ async def get_leaderboard(
                 Player.discord_user_id.asc(),
             )
             .limit(safe_limit)
+            .offset(safe_offset)
         )
-        return [
+        entries = [
             (discord_user_id, total_balance)
             for discord_user_id, total_balance in result.all()
         ]
+        return entries, int(total_count or 0)
