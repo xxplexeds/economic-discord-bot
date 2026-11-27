@@ -51,3 +51,32 @@ async def get_or_create_balances(
                 balances.get("wallet", Decimal("0.00")),
                 balances.get("bank", Decimal("0.00")),
             )
+
+
+async def get_leaderboard(
+    guild_id: int,
+    limit: int = 10,
+) -> list[tuple[int, Decimal]]:
+    """Return members ranked by combined wallet and bank balance."""
+    from sqlalchemy import func
+
+    safe_limit = max(1, min(limit, 25))
+    async with session_scope() as session:
+        result = await session.execute(
+            select(
+                Player.discord_user_id,
+                func.sum(Account.balance).label("total_balance"),
+            )
+            .join(Account, Account.player_id == Player.id)
+            .where(Player.guild_id == guild_id)
+            .group_by(Player.id, Player.discord_user_id)
+            .order_by(
+                func.sum(Account.balance).desc(),
+                Player.discord_user_id.asc(),
+            )
+            .limit(safe_limit)
+        )
+        return [
+            (discord_user_id, total_balance)
+            for discord_user_id, total_balance in result.all()
+        ]
