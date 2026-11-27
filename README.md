@@ -19,17 +19,26 @@ Official currency emoji: `<:fihcoin:1575710572907987064>`
 ## Initial services
 
 - `bot.py` — Discord bot entry point with a `/ping` command
-- `api.py` — FastAPI service with basic health endpoints
+- `api.py` — FastAPI service with database-aware `/health` endpoint
+- `database.py` — async SQLAlchemy engine, sessions, and PostgreSQL checks
+- `models.py` — initial player, account, and transaction tables
+
+## Database foundation
+
+The initial schema stores players, wallet/bank accounts, and economy transaction records. Balances use PostgreSQL `NUMERIC(20, 2)` and database constraints prevent negative balances. Both the bot and API verify the database connection and create missing initial tables during startup.
+
+See [docs/DATABASE.md](docs/DATABASE.md) for details. Versioned schema migrations will be added before future production schema changes.
 
 ## Local development
 
 1. Use Python 3.11 or newer.
 2. Install dependencies: `pip install -r requirements.txt`
-3. Copy `.env.example` to `.env` and fill in your Discord bot token.
+3. Copy `.env.example` to `.env` and fill in your Discord bot token and PostgreSQL URL.
 4. Start the bot: `python bot.py`
 5. Start the API separately: `uvicorn api:app --host 0.0.0.0 --port 8000`
+6. Check `/health`; it should return both `"status": "healthy"` and `"database": "connected"`.
 
-Never commit your `.env` file or share your Discord bot token.
+Never commit your `.env` file or share your Discord bot token or database URL.
 
 ## Railway
 
@@ -39,4 +48,6 @@ Deploy the repository as separate Railway services:
 - API start command: `uvicorn api:app --host 0.0.0.0 --port $PORT`
 - PostgreSQL: add a Railway PostgreSQL service and provide its connection URL as `DATABASE_URL`
 
-The database integration, migrations, economy commands, and website are not implemented yet.
+For both application services, a Railway reference such as `${{Postgres.DATABASE_URL}}` can be used when the database service is named `Postgres`.
+
+The actual economy commands, balance-changing operations, transaction service, clans, and website are not implemented yet.
