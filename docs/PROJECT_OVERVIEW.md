@@ -18,8 +18,9 @@ The Discord bot, website, and backend must use the same source of truth for bala
 - No bank interest.
 - Railway is the intended hosting platform.
 - Release 1 supports one Discord server only.
-- Release 1 uses one currency throughout the economy.
+- Release 1 uses one currency: **Fihcoins** (singular: **Fihcoin**, meaning Fish Coin).
 - PostgreSQL is the selected database.
+- The implementation stack is Python + discord.py, FastAPI, PostgreSQL, and Next.js.
 
 ## Product principles
 
@@ -43,6 +44,12 @@ The Discord bot, website, and backend must use the same source of truth for bala
 
 Detailed command names, earning methods, and website permissions remain to be finalized.
 
-## Technical decisions still open
+## Confirmed technical stack
 
-The remaining implementation stack and exact website framework have not yet been locked. PostgreSQL is the selected database, and the deployment is single-server. Railway is the hosting target; service topology will be documented after the stack is selected.
+- **Discord bot:** Python + discord.py
+- **Backend API:** FastAPI
+- **Database:** PostgreSQL
+- **Website:** Next.js
+- **Hosting:** Railway
+
+The initial repository scaffold contains a Discord bot entry point and a basic API health endpoint. Database models, migrations, economy logic, and the website are still to be implemented.
