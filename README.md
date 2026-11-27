@@ -2,10 +2,13 @@
 
 A single-server Discord economy built around **Fihcoins (Fish Coins)**.
 
+Official currency emoji: `<:fihcoin:1575710572907987064>`
+
 ## Current project decisions
 
 - One Discord server for the first release
-- One currency: Fihcoins (singular: Fihcoin)
+- One currency: Fihcoins (singular: Fihcoin), meaning Fish Coin
+- Official Discord currency emoji: `<:fihcoin:1575710572907987064>`
 - PostgreSQL database
 - No gambling mechanics
 - Python + discord.py bot
