@@ -4,6 +4,9 @@ This document records the current economy direction. Values, command names, and 
 
 ## Currency model
 
+- **Release 1 uses one currency only.** Multiple currencies are out of scope for the first release.
+- The project targets one Discord server; there is no need for multi-server economy configuration in Release 1.
+
 The planned account model has two balances:
 
 - **Wallet:** currency available for everyday spending and transfers.
