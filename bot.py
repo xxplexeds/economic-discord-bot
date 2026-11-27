@@ -6,7 +6,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from database import close_database, initialize_database
-from economy import get_leaderboard, get_or_create_balances
+from economy import get_leaderboard_page, get_or_create_balances
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO").upper(),
@@ -63,6 +63,162 @@ class EconomyProfileView(discord.ui.LayoutView):
                 discord.ui.Separator(),
                 discord.ui.TextDisplay(footer),
             )
+        )
+
+
+class LeaderboardPageButton(discord.ui.Button):
+    def __init__(self, leaderboard_view: "LeaderboardView", *, direction: int, disabled: bool) -> None:
+        super().__init__(
+            label="Previous" if direction < 0 else "Next",
+            style=discord.ButtonStyle.secondary,
+            disabled=disabled,
+        )
+        self.leaderboard_view = leaderboard_view
+        self.direction = direction
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await self.leaderboard_view.navigate(
+            interaction,
+            self.leaderboard_view.current_page + self.direction,
+        )
+
+
+class LeaderboardPageSelect(discord.ui.Select):
+    def __init__(self, leaderboard_view: "LeaderboardView") -> None:
+        self.leaderboard_view = leaderboard_view
+        current = leaderboard_view.current_page
+        total_pages = leaderboard_view.total_pages
+        first_page = max(1, min(current - 12, total_pages - 24))
+        last_page = min(total_pages, first_page + 24)
+        options = [
+            discord.SelectOption(
+                label=f"Page {page}",
+                description=(
+                    f"Ranks {(page - 1) * leaderboard_view.page_size + 1}-"
+                    f"{min(page * leaderboard_view.page_size, leaderboard_view.total_count)}"
+                ),
+                value=str(page),
+                default=(page == current),
+            )
+            for page in range(first_page, last_page + 1)
+        ]
+        super().__init__(
+            placeholder=f"Jump to page {current} of {total_pages}",
+            min_values=1,
+            max_values=1,
+            options=options,
+            disabled=(total_pages <= 1),
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await self.leaderboard_view.navigate(interaction, int(self.values[0]))
+
+
+class LeaderboardView(discord.ui.LayoutView):
+    """Interactive Components V2 leaderboard with buttons and a page selector."""
+
+    page_size = 10
+
+    def __init__(
+        self,
+        *,
+        guild_id: int,
+        avatar_url: str,
+        entries: list[tuple[int, object]],
+        total_count: int,
+        page: int = 1,
+    ) -> None:
+        super().__init__(timeout=900)
+        self.guild_id = guild_id
+        self.avatar_url = avatar_url
+        self.entries = entries
+        self.total_count = total_count
+        self.total_pages = max(1, (total_count + self.page_size - 1) // self.page_size)
+        self.current_page = page
+        self._render()
+
+    def _render(self) -> None:
+        self.clear_items()
+        if not self.entries:
+            rankings = "No members have economy accounts yet. Use /balance to create an account!"
+        else:
+            medals = ["🥇", "🥈", "🥉"]
+            lines = []
+            for index, (member_id, total_balance) in enumerate(
+                self.entries,
+                start=(self.current_page - 1) * self.page_size + 1,
+            ):
+                marker = medals[index - 1] if index <= 3 else f"**#{index}**"
+                lines.append(
+                    f"{marker} <@{member_id}> — **{total_balance:,.2f} {FIHCOIN}**"
+                )
+            rankings = "\\n".join(lines)
+
+        profile = discord.ui.Section(
+            discord.ui.TextDisplay("## Fihcoin Leaderboard"),
+            accessory=discord.ui.Thumbnail(media=self.avatar_url),
+        )
+        self.add_item(
+            discord.ui.Container(
+                profile,
+                discord.ui.TextDisplay("Top 10 members ranked by wallet + bank balance."),
+                discord.ui.Separator(),
+                discord.ui.TextDisplay(rankings),
+                discord.ui.Separator(),
+                discord.ui.TextDisplay(
+                    f"Page **{self.current_page}** of **{self.total_pages}**"
+                    f" • {self.total_count:,} members"
+                ),
+                discord.ui.Separator(),
+                discord.ui.TextDisplay(
+                    "Fihcoin • Fish Coin • Rankings are server-specific"
+                ),
+            )
+        )
+        self.add_item(
+            discord.ui.ActionRow(
+                LeaderboardPageButton(
+                    self,
+                    direction=-1,
+                    disabled=(self.current_page <= 1),
+                ),
+                LeaderboardPageButton(
+                    self,
+                    direction=1,
+                    disabled=(self.current_page >= self.total_pages),
+                ),
+            )
+        )
+        self.add_item(discord.ui.ActionRow(LeaderboardPageSelect(self)))
+
+    async def navigate(self, interaction: discord.Interaction, page: int) -> None:
+        target_page = max(1, min(page, self.total_pages))
+        try:
+            entries, total_count = await get_leaderboard_page(
+                self.guild_id,
+                limit=self.page_size,
+                offset=(target_page - 1) * self.page_size,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to retrieve leaderboard page %s for guild %s",
+                target_page,
+                self.guild_id,
+            )
+            await interaction.response.send_message(
+                "I couldn't load that leaderboard page. Please try again shortly.",
+                ephemeral=True,
+            )
+            return
+
+        self.entries = entries
+        self.total_count = total_count
+        self.total_pages = max(1, (total_count + self.page_size - 1) // self.page_size)
+        self.current_page = min(target_page, self.total_pages)
+        self._render()
+        await interaction.response.edit_message(
+            view=self,
+            allowed_mentions=discord.AllowedMentions.none(),
         )
 
 
@@ -177,23 +333,20 @@ async def leaderboard(interaction: discord.Interaction) -> None:
 
     await interaction.response.defer(thinking=True)
     try:
-        entries = await get_leaderboard(interaction.guild.id, limit=10)
+        entries, total_count = await get_leaderboard_page(
+            interaction.guild.id,
+            limit=LeaderboardView.page_size,
+            offset=0,
+        )
     except Exception:
-        logger.exception("Failed to retrieve the Fihcoin leaderboard for guild %s", interaction.guild.id)
+        logger.exception(
+            "Failed to retrieve the Fihcoin leaderboard for guild %s",
+            interaction.guild.id,
+        )
         await interaction.followup.send(
             "I couldn't retrieve the leaderboard right now. Please try again shortly."
         )
         return
-
-    if not entries:
-        description = "No members have economy accounts yet. Use /balance to create an account!"
-    else:
-        medals = ["🥇", "🥈", "🥉"]
-        lines = []
-        for rank, (member_id, total_balance) in enumerate(entries, start=1):
-            marker = medals[rank - 1] if rank <= 3 else f"**#{rank}**"
-            lines.append(f"{marker} <@{member_id}> — **{total_balance:,.2f} {FIHCOIN}**")
-        description = "\n".join(lines)
 
     # Prefer the server icon; use the invoking member's avatar if the server has no icon.
     avatar_url = (
@@ -201,15 +354,11 @@ async def leaderboard(interaction: discord.Interaction) -> None:
         if interaction.guild.icon
         else interaction.user.display_avatar.url
     )
-    view = EconomyProfileView(
-        heading="Fihcoin Leaderboard",
-        description="",
-        description_sections=(
-            "Top 10 members ranked by wallet + bank balance.",
-            description,
-        ),
+    view = LeaderboardView(
+        guild_id=interaction.guild.id,
         avatar_url=avatar_url,
-        footer="Fihcoin • Fish Coin • Rankings are server-specific",
+        entries=entries,
+        total_count=total_count,
     )
     await interaction.followup.send(
         view=view,
