@@ -1,5 +1,22 @@
 # Fihcoin Economic Bot — Update Log
 
+## 2026-11-27 — Add private transaction history
+
+### Added
+- Added the private `/transactions` command with a separate read-only Components V2 message; it does not edit or replace `/balance`.
+- Members can view only their own sent and received transaction records.
+- Discord Administrators and members with an active configured Administrative Role grant can privately inspect another member's history.
+- Added Previous / Next buttons, a page dropdown, 10 records per page, and a 15-minute interactive view.
+- Re-check cross-member history permissions when an administrator navigates pages.
+- Added transaction-history query and transaction-record helper functions. Balance-changing commands must write the record in the same database transaction as the balance update.
+
+### Notes
+- The transaction table already exists. Since balance-changing economy commands are not implemented yet, the history will remain empty until those commands use the transaction-record helper.
+- The configured Administrative Role currently uses the existing `AdminRoleGrant` database records; a dashboard control for managing those grants is not part of this change.
+- The `/transactions` response is ephemeral. The Discord client displays the "Only you can see this" banner.
+
+---
+
 ## 2026-11-27 — Add interactive leaderboard pagination
 
 ### Added
