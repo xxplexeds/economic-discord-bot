@@ -73,6 +73,20 @@ async def check_database_connection() -> bool:
     return True
 
 
+from contextlib import asynccontextmanager
+
+
+@asynccontextmanager
+async def session_scope() -> AsyncIterator[AsyncSession]:
+    """Provide a scoped async session; callers control transaction boundaries."""
+    get_engine()
+    if _session_factory is None:
+        raise RuntimeError("Database session factory was not initialized.")
+
+    async with _session_factory() as session:
+        yield session
+
+
 async def get_session() -> AsyncIterator[AsyncSession]:
     get_engine()
     if _session_factory is None:
