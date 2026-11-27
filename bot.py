@@ -344,7 +344,7 @@ class TransactionHistoryView(discord.ui.LayoutView):
                 if record.fee:
                     line += f" • Fee: {record.fee:,.2f} {FIHCOIN}"
                 if record.note:
-                    line += f"\n_{discord.utils.escape_markdown(record.note)}_"
+                    line += f"\n_{discord.utils.escape_markdown(record.note[:160])}{'…' if len(record.note) > 160 else ''}_"
                 if record.actor_discord_id and record.actor_discord_id != self.target_id:
                     line += f"\nBy <@{record.actor_discord_id}>"
                 lines.append(line)
