@@ -24,6 +24,13 @@ DATABASE_URL=${{Postgres.DATABASE_URL}}
 
 The service name inside the reference must match the actual PostgreSQL service name in Railway.
 
+## Transaction history
+
+- The `/transactions` command reads the member's sent and received rows from `economy_transactions`, scoped to the current guild.
+- The command response is ephemeral and read-only. Regular members can query only their own history. Discord Administrators and members with active `admin_user_grants` or `admin_role_grants` can inspect another member.
+- Use the `record_transaction` helper from `economy.py` inside the same active SQLAlchemy transaction that changes account balances. This keeps the balance update and history row atomic.
+- A history page contains 10 records, ordered newest-first. The view provides Previous / Next buttons and a page dropdown.
+
 ## Important implementation notes
 
 - Keep the database URL and Discord token in Railway Variables or a local ignored `.env` file.
