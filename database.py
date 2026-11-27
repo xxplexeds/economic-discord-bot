@@ -1,5 +1,6 @@
 import logging
 import os
+from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 
 from dotenv import load_dotenv
@@ -71,6 +72,18 @@ async def check_database_connection() -> bool:
     async with engine.connect() as connection:
         await connection.execute(text("SELECT 1"))
     return True
+
+
+
+@asynccontextmanager
+async def session_scope() -> AsyncIterator[AsyncSession]:
+    """Provide a scoped async session; callers control transaction boundaries."""
+    get_engine()
+    if _session_factory is None:
+        raise RuntimeError("Database session factory was not initialized.")
+
+    async with _session_factory() as session:
+        yield session
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:
