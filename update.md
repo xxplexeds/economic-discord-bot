@@ -2,6 +2,38 @@
 
 This file records project decisions, implementation changes, and setup milestones. Add a new dated entry whenever the project is updated. Keep entries newest-first and describe user-visible changes separately from planning or infrastructure work.
 
+## 2026-11-27 — PostgreSQL foundation
+
+### Added
+- Added an async SQLAlchemy database layer using PostgreSQL and asyncpg.
+- Added the initial `players` table to identify a Discord user within a server.
+- Added the `accounts` table for separate wallet and bank balances.
+- Added the `economy_transactions` table to record transaction participants, amounts, fees, notes, and timestamps.
+- Added database constraints for valid account types, non-negative balances and fees, and positive transaction amounts.
+- Added `docs/DATABASE.md` describing the schema and database safety requirements.
+- Added `python-dotenv` for loading local `.env` configuration.
+
+### Changed
+- The FastAPI `/health` endpoint now checks PostgreSQL and reports `database: connected` when successful.
+- The Discord bot now verifies PostgreSQL and ensures the initial tables exist during startup.
+- The FastAPI service now verifies PostgreSQL and ensures the initial tables exist during startup.
+- Updated `.env.example` and `README.md` with the database configuration and behavior.
+
+### Infrastructure / setup
+- Railway now has separate Discord Bot and FastAPI Backend services plus a PostgreSQL service.
+- Both application services use the Railway PostgreSQL variable reference for `DATABASE_URL`.
+- The deployed bot successfully responded to `/ping`.
+- The deployed API returned a healthy response before database integration was added.
+
+### Not implemented / follow-up
+- Deploy this database foundation and verify `/health` returns `{"status":"healthy","database":"connected"}`.
+- Add versioned Alembic migrations before making future production schema changes.
+- Implement player registration and account creation.
+- Implement atomic balance operations and matching transaction writes.
+- Add economy commands, clans, shop, leaderboards, and website.
+
+---
+
 ## 2026-11-27 — Project foundation and Fihcoin identity
 
 ### Confirmed decisions
