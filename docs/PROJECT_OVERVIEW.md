@@ -17,6 +17,9 @@ The Discord bot, website, and backend must use the same source of truth for bala
 - No gambling mechanics.
 - No bank interest.
 - Railway is the intended hosting platform.
+- Release 1 supports one Discord server only.
+- Release 1 uses one currency throughout the economy.
+- PostgreSQL is the selected database.
 
 ## Product principles
 
@@ -25,7 +28,7 @@ The Discord bot, website, and backend must use the same source of truth for bala
 3. **Auditability:** balance changes must create traceable transaction records.
 4. **Consistency:** bot and website must use the same backend rules.
 5. **Permission safety:** administrative actions must be authorized and logged.
-6. **Server isolation:** server-specific data must never leak across Discord servers if multi-server support is enabled.
+6. **Focused first release:** build for one Discord server and one currency; avoid multi-server and multi-currency complexity until a future release.
 
 ## Planned product areas
 
@@ -38,8 +41,8 @@ The Discord bot, website, and backend must use the same source of truth for bala
 - Leaderboards.
 - Website member area and administration panel.
 
-Detailed command names, earning methods, currency scope, and website permissions remain to be finalized.
+Detailed command names, earning methods, and website permissions remain to be finalized.
 
 ## Technical decisions still open
 
-The implementation stack, database provider, single-server versus multi-server behavior, and exact website framework have not yet been locked. Railway is the hosting target; service topology will be documented after the stack is selected.
+The remaining implementation stack and exact website framework have not yet been locked. PostgreSQL is the selected database, and the deployment is single-server. Railway is the hosting target; service topology will be documented after the stack is selected.
