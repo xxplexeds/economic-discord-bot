@@ -1,5 +1,13 @@
 # Fihcoin Economic Bot — Update Log
 
+## 2026-11-27 — Disable leaderboard mention notifications
+
+### Fixed
+- Kept leaderboard member mentions visible and clickable while disabling all mention notifications in the leaderboard response with `discord.AllowedMentions.none()`.
+
+---
+
+
 ## 2026-11-27 — Balance profile and leaderboard UI refinements
 
 ### Changed
