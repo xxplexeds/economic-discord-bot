@@ -1,5 +1,14 @@
 # Fihcoin Economic Bot — Update Log
 
+## 2026-11-27 — Add balance section dividers
+
+### Changed
+- Rebuilt the `/balance` Components V2 layout with separate Wallet, Bank, and Total text sections divided by native Discord Separator components.
+- Kept the member avatar, silent clickable mention, and shared leaderboard profile layout intact.
+
+---
+
+
 ## 2026-11-27 — Disable leaderboard mention notifications
 
 ### Fixed
