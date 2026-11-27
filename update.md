@@ -1,82 +1,81 @@
 # Fihcoin Economic Bot — Update Log
 
-This file records project decisions, implementation changes, and setup milestones. Add a new dated entry whenever the project is updated. Keep entries newest-first and describe user-visible changes separately from planning or infrastructure work.
+This file records project decisions, implementation changes, and setup milestones. Keep entries newest-first. A planned or specified feature must not be described as live.
+
+## 2026-11-27 — Administration and dashboard foundation
+
+### Confirmed
+- Management access supports Discord Administrator permission, explicit Discord User ID grants, and explicit Discord Role ID grants.
+- Regular members retain access to regular economy commands; management authorization protects administrative actions.
+- Blocking is an economy-level restriction, not a Discord server ban.
+- Blocked users cannot earn, receive, transfer, deposit, withdraw, purchase, or use clan economy features.
+- Blocked users retain balances and transaction history; unblocking restores eligibility.
+- Management access is independent from economy blocked status.
+- Confirmed audit logs, economy analytics, maintenance mode, configurable Discord logging channels, and database backups.
+
+### Added
+- Added docs/ADMIN_DASHBOARD.md with the agreed access-control, blocklist, audit, analytics, maintenance, logging, backup, OAuth, and last-admin safety requirements.
+- Added SQLAlchemy model foundations for explicit administrator User ID grants and Role ID grants.
+- Added a blocked-user model with reason and block/unblock actor/timestamps.
+- Added an administrative audit-event model.
+- Added model foundations for maintenance settings, event log-channel configuration, and backup metadata.
+- Expanded the roadmap and project overview to track these requirements.
+
+### Status
+- These changes are on feature/admin-dashboard-foundation, based on the open PostgreSQL foundation PR. They are not merged, deployed, or live.
+- OAuth login, authorization enforcement, block/unblock endpoints, audit UI, analytics, maintenance controls, Discord log delivery, and backup jobs still require implementation and testing.
+- PR #3 must be merged and deployed before Railway can create/use these additional model tables.
+
+---
 
 ## 2026-11-27 — PostgreSQL foundation
 
 ### Added
 - Added an async SQLAlchemy database layer using PostgreSQL and asyncpg.
-- Added the initial `players` table to identify a Discord user within a server.
-- Added the `accounts` table for separate wallet and bank balances.
-- Added the `economy_transactions` table to record transaction participants, amounts, fees, notes, and timestamps.
-- Added database constraints for valid account types, non-negative balances and fees, and positive transaction amounts.
-- Added `docs/DATABASE.md` describing the schema and database safety requirements.
-- Added `python-dotenv` for loading local `.env` configuration.
+- Added initial players, wallet/bank accounts, and economy transaction tables.
+- Added constraints for valid account types, non-negative balances/fees, and positive transaction amounts.
+- Added docs/DATABASE.md and python-dotenv.
 
 ### Changed
-- The FastAPI `/health` endpoint now checks PostgreSQL and reports `database: connected` when successful.
-- The Discord bot now verifies PostgreSQL and ensures the initial tables exist during startup.
-- The FastAPI service now verifies PostgreSQL and ensures the initial tables exist during startup.
-- Updated `.env.example` and `README.md` with the database configuration and behavior.
+- FastAPI /health checks PostgreSQL and reports database connectivity.
+- Bot and API initialize the initial database schema at startup.
+- Updated .env.example and README.md with database configuration.
 
-### Infrastructure / setup
-- Railway now has separate Discord Bot and FastAPI Backend services plus a PostgreSQL service.
-- Both application services use the Railway PostgreSQL variable reference for `DATABASE_URL`.
-- The deployed bot successfully responded to `/ping`.
-- The deployed API returned a healthy response before database integration was added.
+### Infrastructure
+- Railway has Discord Bot, FastAPI Backend, and PostgreSQL services.
+- Both app services reference the Railway PostgreSQL DATABASE_URL variable.
+- The deployed bot responded to /ping.
+- The API returned a healthy response before the database-aware health check was merged/deployed.
 
-### Not implemented / follow-up
-- Deploy this database foundation and verify `/health` returns `{"status":"healthy","database":"connected"}`.
-- Add versioned Alembic migrations before making future production schema changes.
-- Implement player registration and account creation.
-- Implement atomic balance operations and matching transaction writes.
-- Add economy commands, clans, shop, leaderboards, and website.
+### Follow-up
+- Merge/deploy PR #3 and verify /health reports database connected.
+- Add Alembic migrations before future production schema changes.
+- Implement economy commands, atomic balance operations, clans, shop, leaderboards, and website.
 
 ---
 
 ## 2026-11-27 — Project foundation and Fihcoin identity
 
-### Confirmed decisions
-- Release 1 targets one Discord server.
-- Release 1 uses one currency: **Fihcoins** (singular: **Fihcoin**), meaning **Fish Coin**.
-- Official currency emoji: `<:fihcoin:1575710572907987064>`.
-- PostgreSQL is the selected database.
-- Technology stack: Python + discord.py, FastAPI, PostgreSQL, and Next.js.
-- Railway is the selected hosting platform.
-- Gambling mechanics are excluded.
-- Bank interest is excluded; the planned bank uses configurable taxes only.
+### Confirmed
+- One Discord server and one currency for Release 1.
+- Fihcoins (singular: Fihcoin), meaning Fish Coin.
+- Official emoji: <:fihcoin:1575710572907987064>.
+- PostgreSQL, Python + discord.py, FastAPI, Next.js, and Railway.
+- No gambling mechanics and no bank interest.
 
-### Discord setup
-- Created the Discord application and bot.
-- Configured the application for a private, single-server installation.
-- Invited the bot to the intended Discord server.
-- Bot token and other credentials must remain in secure environment variables and must never be committed here.
-
-### Repository foundation
-- Added the initial Python Discord bot entry point in `bot.py`, including a `/ping` command and application-command synchronization.
-- Added a basic FastAPI application in `api.py` with root and `/health` endpoints.
-- Added `requirements.txt` for the initial Python dependencies.
-- Added `.env.example` as a safe environment-variable template.
-- Added `.gitignore` to exclude local environments and secret files.
-- Updated `README.md` and `docs/ECONOMY.md` with the official Fihcoin name and custom emoji.
-- Added the initial project planning documents under `docs/`.
+### Added
+- Initial bot entry point with /ping and application-command synchronization.
+- Initial FastAPI app with root and /health endpoints.
+- requirements.txt, .env.example, .gitignore, README.md, and initial docs.
+- Official Fihcoin identity and emoji in project documentation.
 
 ### Not implemented yet
-- PostgreSQL schema, database connection, and migrations.
-- Wallet and bank operations.
-- Tax processing and transaction history.
-- Economy commands beyond `/ping`.
-- Clan system, shop, and leaderboards.
-- Next.js website and Discord OAuth.
-- Railway services, variables, and production deployment.
+- Economy commands beyond /ping, balance operations, taxes, transaction history, clans, shop, leaderboards, website, and Discord OAuth.
 
 ---
 
 ## Update entry template
 
-When adding future updates, copy this structure:
-
-```md
 ## YYYY-MM-DD — Short update title
 
 ### Added
@@ -93,4 +92,3 @@ When adding future updates, copy this structure:
 
 ### Not implemented / follow-up
 - ...
-```
