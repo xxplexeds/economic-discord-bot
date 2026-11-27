@@ -1,11 +1,30 @@
 # Fihcoin Economic Bot — Update Log
 
-## 2026-11-27 — Wallet and balance foundation (in development)
+## 2026-11-27 — Balance profiles and leaderboard
+
+### Added
+- Updated `/balance` to accept an optional server member, so members can view their own balance or look up another member.
+- Rebuilt balance responses with Discord Components V2, including wallet, bank, combined total, Fihcoin emoji, and the target member's avatar.
+- Added the public `/leaderboard` command showing the top 10 members by combined wallet and bank balance.
+- Added deterministic tie ordering for leaderboard entries.
+
+### Changed
+- Balance and leaderboard views are public.
+- Corrected the wallet foundation status below: PR #5 has been merged into `main`; deployment still needs to be confirmed.
+
+### Scope
+- These commands only read balances and initialize missing zero-balance accounts. They do not add, transfer, deposit, or withdraw currency.
+
+---
+
+# Fihcoin Economic Bot — Update Log
+
+## 2026-11-27 — Wallet and balance foundation (merged)
 
 ### Added
 - Added shared PostgreSQL-backed balance retrieval that creates a player's wallet and bank accounts on first use.
 - Added the `/balance` Discord command showing wallet, bank, and combined totals with two decimal places.
-- Balance responses are ephemeral and include the member's Discord avatar.
+- The initial balance response used a private embed and included the member's Discord avatar.
 - Added a scoped async SQLAlchemy session helper for explicit transaction boundaries.
 
 ### Safety and integrity
@@ -13,7 +32,7 @@
 - This milestone only reads balances and initializes zero-balance accounts; it does not yet add, transfer, deposit, or withdraw currency.
 
 ### Status
-- Implementation is on `feature/wallet-balance-system`; review and merge are required before deployment.
+- PR #5 was merged into `main`. Confirm the Railway bot deployment before treating the command as live.
 
 ---
 

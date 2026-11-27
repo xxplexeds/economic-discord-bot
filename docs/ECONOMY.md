@@ -15,7 +15,7 @@ The account model has two balances:
 - **Wallet:** currency available for everyday spending and transfers.
 - **Bank:** currency stored separately from the wallet.
 
-New members receive zero-balance wallet and bank accounts automatically when they first use `/balance`. The command displays both balances and their combined total privately to the requesting member, using two decimal places.
+A member receives zero-balance wallet and bank accounts automatically the first time their profile is looked up with `/balance`. The public Components V2 profile shows wallet, bank, and combined total using two decimal places, with the member's avatar. `/balance user:@member` can look up another member in the server. `/leaderboard` shows the top 10 members ranked by combined wallet and bank balance; ties are ordered consistently by Discord user ID.
 
 Deposits move currency from wallet to bank. Withdrawals move currency from bank to wallet. These are internal virtual-currency movements and do not represent real-world money.
 
