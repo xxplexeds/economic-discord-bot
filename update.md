@@ -1,5 +1,22 @@
 # Fihcoin Economic Bot — Update Log
 
+## 2026-11-27 — Wallet and balance foundation (in development)
+
+### Added
+- Added shared PostgreSQL-backed balance retrieval that creates a player's wallet and bank accounts on first use.
+- Added the `/balance` Discord command showing wallet, bank, and combined totals with two decimal places.
+- Balance responses are ephemeral and include the member's Discord avatar.
+- Added a scoped async SQLAlchemy session helper for explicit transaction boundaries.
+
+### Safety and integrity
+- Player and account creation use PostgreSQL conflict handling so concurrent first-time requests do not create duplicate profiles or accounts.
+- This milestone only reads balances and initializes zero-balance accounts; it does not yet add, transfer, deposit, or withdraw currency.
+
+### Status
+- Implementation is on `feature/wallet-balance-system`; review and merge are required before deployment.
+
+---
+
 This file records project decisions, implementation changes, and setup milestones. Keep entries newest-first. A planned or specified feature must not be described as live.
 
 ## 2026-11-27 — Administration and dashboard foundation
