@@ -1,5 +1,16 @@
 # Fihcoin Economic Bot — Update Log
 
+## 2026-11-27 — Add interactive leaderboard pagination
+
+### Added
+- Added Previous and Next buttons to the public Components V2 leaderboard.
+- Added a page dropdown for jumping directly between leaderboard pages.
+- Display 10 members per page, current page, total pages, and total ranked members.
+- Keep ranking numbers continuous across pages and disable mention notifications during page updates.
+
+---
+
+
 ## 2026-11-27 — Add leaderboard section divider
 
 ### Changed
