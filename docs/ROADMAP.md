@@ -1,64 +1,82 @@
 # Development Roadmap
 
-This roadmap is a working plan, not a claim that any phase is complete.
+This roadmap separates confirmed decisions from implemented functionality. A checked item means code exists and has been verified; planned items are not yet available to users.
 
-## Phase 1 — Product and architecture decisions
+## Phase 1 — Product decisions
 
-- [x] Confirm Railway as the intended host.
-- [x] Confirm Candy Bot-inspired rebuild with improved features and UI.
-- [x] Confirm clans with shared treasury, roles, and leaderboards.
-- [x] Confirm configurable taxes and visible tax history.
-- [x] Exclude gambling and bank interest.
-- [ ] Select language and Discord library.
-- [ ] Select backend framework and database.
-- [ ] Decide single-server versus multi-server scope.
-- [ ] Finalize wallet/bank behavior and tax types.
-- [ ] Finalize commands, permissions, and website scope.
+- [x] Railway hosting.
+- [x] Candy Bot-inspired rebuild with improved functionality and UI.
+- [x] One Discord server and one currency for Release 1.
+- [x] Fihcoins (Fihcoin) and official custom emoji.
+- [x] Python + discord.py, FastAPI, PostgreSQL, and Next.js.
+- [x] No gambling and no bank interest.
+- [x] Two-decimal currency precision.
+- [x] Management access by Discord Administrator permission, User IDs, and Role IDs.
+- [x] Economy-level blocks do not ban users from Discord.
+- [x] Audit logs, analytics, maintenance, configurable logging, and backups confirmed.
 
 ## Phase 2 — Foundation
 
-- [ ] Establish application structure and dependency management.
-- [ ] Add configuration and secret handling.
-- [ ] Add database connection and schema/migration strategy.
-- [ ] Add structured logging and health checks.
+- [x] Initial Discord bot and FastAPI scaffold.
+- [x] PostgreSQL connection and initial player/account/transaction schema in PR #3.
+- [ ] Merge and deploy PostgreSQL foundation; verify live database health.
+- [ ] Add Alembic migrations before evolving production schema.
 - [ ] Add automated tests and CI checks.
 
 ## Phase 3 — Core economy
 
-- [ ] Accounts and balances.
-- [ ] Atomic transaction service.
-- [ ] Transaction history and audit records.
-- [ ] Administrative add/remove/subtract operations.
-- [ ] Wallet and bank operations.
-- [ ] Configurable tax engine.
+- [ ] Player registration and wallet/bank account creation.
+- [ ] Atomic balance service and transaction history.
+- [ ] /balance and member profile.
+- [ ] Payments, deposits, withdrawals, and configurable taxes.
+- [ ] Administrative balance adjustments with confirmation and audit.
 
-## Phase 4 — Discord experience
+## Phase 4 — Access control and safety
 
-- [ ] Member economy commands.
-- [ ] Profile and balance views.
-- [ ] Leaderboards.
-- [ ] Permission checks and useful error responses.
-- [ ] Consistent, polished Discord UI.
+- [ ] Shared authorization service for Discord and website.
+- [ ] Discord Administrator permission check.
+- [ ] Explicit User ID grants.
+- [ ] Explicit Role ID grants.
+- [ ] Economy-level block/unblock and blocked-user list.
+- [ ] Server-side block enforcement for every economy operation.
+- [ ] Preserve balances/history across blocks.
+- [ ] Audit permission and block/unblock changes.
+- [ ] Prevent removal of the final management access path.
 
-## Phase 5 — Clan system
+## Phase 5 — Operations
 
-- [ ] Clan lifecycle and membership.
-- [ ] Clan roles and permission matrix.
-- [ ] Shared treasury and atomic contributions.
+- [ ] Audit log views and filters.
+- [ ] Economy analytics.
+- [ ] Maintenance mode and configurable message.
+- [ ] Discord log-channel configuration by event category.
+- [ ] Scheduled encrypted backups stored separately from PostgreSQL.
+- [ ] Backup history, integrity checks, and restore procedure.
+
+## Phase 6 — Discord experience
+
+- [ ] Member economy commands and polished Components V2 responses.
+- [ ] Leaderboards and transaction history.
+- [ ] Consistent permission and blocked-user responses.
+
+## Phase 7 — Next.js website
+
+- [ ] Discord OAuth2 login and secure server-side sessions.
+- [ ] Member dashboard: profile, balances, and history.
+- [ ] Administrator dashboard: overview and bot status.
+- [ ] Access Control: authorized User IDs, authorized Role IDs, blocked users, and access history.
+- [ ] Economy management and transaction views.
+- [ ] Analytics, maintenance, logging, audit logs, and backup management.
+- [ ] Responsive desktop/mobile layout.
+
+## Phase 8 — Clans and other economy features
+
+- [ ] Clan lifecycle, membership, roles, and shared treasury.
 - [ ] Clan history and leaderboards.
+- [ ] Shop and other approved non-gambling features.
 
-## Phase 6 — Website
+## Phase 9 — Production readiness
 
-- [ ] Discord OAuth login.
-- [ ] Member dashboard.
-- [ ] Profile, balances, and history.
-- [ ] Leaderboards and clan pages.
-- [ ] Administrator dashboard and configuration.
-
-## Phase 7 — Railway deployment
-
-- [ ] Staging deployment.
+- [ ] Staging and end-to-end tests.
 - [ ] Production deployment.
-- [ ] Health checks, logs, and restart validation.
-- [ ] Backup and recovery plan.
-- [ ] Security and transaction-integrity review.
+- [ ] OAuth/API/admin security review.
+- [ ] Backup restore drill and recovery documentation.
