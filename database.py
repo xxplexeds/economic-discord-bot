@@ -1,5 +1,6 @@
 import logging
 import os
+from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 
 from dotenv import load_dotenv
@@ -72,8 +73,6 @@ async def check_database_connection() -> bool:
         await connection.execute(text("SELECT 1"))
     return True
 
-
-from contextlib import asynccontextmanager
 
 
 @asynccontextmanager
