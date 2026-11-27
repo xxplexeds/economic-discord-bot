@@ -338,17 +338,17 @@ class TransactionHistoryView(discord.ui.LayoutView):
 
                 timestamp = int(record.created_at.timestamp()) if record.created_at else 0
                 line = (
-                    f"**{direction}** • **{amount}**\\n"
+                    f"**{direction}** • **{amount}**\n"
                     f"<t:{timestamp}:f>"
                 )
                 if record.fee:
                     line += f" • Fee: {record.fee:,.2f} {FIHCOIN}"
                 if record.note:
-                    line += f"\\n_{discord.utils.escape_markdown(record.note)}_"
+                    line += f"\n_{discord.utils.escape_markdown(record.note)}_"
                 if record.actor_discord_id and record.actor_discord_id != self.target_id:
-                    line += f"\\nBy <@{record.actor_discord_id}>"
+                    line += f"\nBy <@{record.actor_discord_id}>"
                 lines.append(line)
-            details = "\\n\\n".join(lines)
+            details = "\n\n".join(lines)
 
         profile = discord.ui.Section(
             discord.ui.TextDisplay("## Fihcoin Transaction History"),
