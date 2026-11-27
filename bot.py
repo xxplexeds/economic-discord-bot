@@ -181,7 +181,10 @@ async def leaderboard(interaction: discord.Interaction) -> None:
         avatar_url=avatar_url,
         footer="Fihcoin • Fish Coin • Rankings are server-specific",
     )
-    await interaction.followup.send(view=view)
+    await interaction.followup.send(
+        view=view,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
 
 
 def main() -> None:
