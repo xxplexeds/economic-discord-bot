@@ -5,7 +5,9 @@ This document records the current economy direction. Values, command names, and 
 ## Currency model
 
 - **Release 1 uses one currency only: Fihcoins.** Multiple currencies are out of scope for the first release.
-- The confirmed currency display name is **Fihcoins**; singular wording and symbol/abbreviation remain undecided.
+- The currency name is **Fihcoins** (singular: **Fihcoin**), meaning **Fish Coin**.
+- The official Discord currency emoji is `<:fihcoin:1575710572907987064>`.
+- The bot should use the configured custom emoji when displaying currency amounts, with a sensible text fallback if the emoji is unavailable.
 - The project targets one Discord server; there is no need for multi-server economy configuration in Release 1.
 
 The planned account model has two balances:
