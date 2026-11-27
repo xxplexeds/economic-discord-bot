@@ -10,10 +10,12 @@ This document records the current economy direction. Values, command names, and 
 - The bot should use the configured custom emoji when displaying currency amounts, with a sensible text fallback if the emoji is unavailable.
 - The project targets one Discord server; there is no need for multi-server economy configuration in Release 1.
 
-The planned account model has two balances:
+The account model has two balances:
 
 - **Wallet:** currency available for everyday spending and transfers.
 - **Bank:** currency stored separately from the wallet.
+
+New members receive zero-balance wallet and bank accounts automatically when they first use `/balance`. The command displays both balances and their combined total privately to the requesting member, using two decimal places.
 
 Deposits move currency from wallet to bank. Withdrawals move currency from bank to wallet. These are internal virtual-currency movements and do not represent real-world money.
 
