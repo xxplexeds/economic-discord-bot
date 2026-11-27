@@ -132,7 +132,7 @@ async def balance(
     )
     await interaction.followup.send(
         view=view,
-        allowed_mentions=discord.AllowedMentions(users=True),
+        allowed_mentions=discord.AllowedMentions.none(),
     )
 
 
