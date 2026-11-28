@@ -106,8 +106,19 @@ def normalize_bank_name(name: str) -> tuple[str, str]:
     return cleaned, unicodedata.normalize("NFKC", cleaned).casefold()
 
 
-async def create_bank(guild_id: int, owner_discord_id: int, name: str) -> Bank:
+async def create_bank(
+    guild_id: int,
+    owner_discord_id: int,
+    name: str,
+    *,
+    description: Optional[str] = None,
+    banner_url: Optional[str] = None,
+    logo_url: Optional[str] = None,
+) -> Bank:
     bank_name, normalized_name = normalize_bank_name(name)
+    description = description.strip() if description else None
+    if description is not None and len(description) > 500:
+        raise BankError("Bank descriptions must be 500 characters or fewer.")
     try:
         async with session_scope() as session:
             async with session.begin():
@@ -134,6 +145,9 @@ async def create_bank(guild_id: int, owner_discord_id: int, name: str) -> Bank:
                     name=bank_name,
                     normalized_name=normalized_name,
                     owner_discord_id=owner_discord_id,
+                    description=description or None,
+                    banner_url=banner_url,
+                    logo_url=logo_url,
                 )
                 session.add(bank)
                 await session.flush()
@@ -149,6 +163,54 @@ async def create_bank(guild_id: int, owner_discord_id: int, name: str) -> Bank:
             "A bank with that name exists, or you already belong to a bank. Please try again."
         ) from error
     return bank
+
+
+async def update_bank_profile(
+    guild_id: int,
+    owner_discord_id: int,
+    name: str,
+    *,
+    description: Optional[str],
+    banner_url: Optional[str] = None,
+    logo_url: Optional[str] = None,
+) -> Bank:
+    bank_name, normalized_name = normalize_bank_name(name)
+    description = description.strip() if description else None
+    if description is not None and len(description) > 500:
+        raise BankError("Bank descriptions must be 500 characters or fewer.")
+    try:
+        async with session_scope() as session:
+            async with session.begin():
+                bank = await session.scalar(
+                    select(Bank)
+                    .where(
+                        Bank.guild_id == guild_id,
+                        Bank.owner_discord_id == owner_discord_id,
+                    )
+                    .with_for_update()
+                )
+                if bank is None:
+                    raise BankError("Only the current bank owner can edit the bank profile.")
+                duplicate = await session.scalar(
+                    select(Bank.id).where(
+                        Bank.guild_id == guild_id,
+                        Bank.normalized_name == normalized_name,
+                        Bank.id != bank.id,
+                    )
+                )
+                if duplicate is not None:
+                    raise BankError("A bank with that name already exists in this server.")
+
+                bank.name = bank_name
+                bank.normalized_name = normalized_name
+                bank.description = description
+                if banner_url is not None:
+                    bank.banner_url = banner_url
+                if logo_url is not None:
+                    bank.logo_url = logo_url
+                return bank
+    except IntegrityError as error:
+        raise BankError("A bank with that name already exists in this server.") from error
 
 
 async def invite_to_bank(

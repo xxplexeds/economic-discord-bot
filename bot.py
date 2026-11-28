@@ -19,6 +19,7 @@ from banks import (
     decide_bank_request,
     disband_bank,
     get_bank_details,
+    get_owned_bank,
     initiate_bank_transfer,
     invite_to_bank,
     leave_bank,
@@ -27,6 +28,7 @@ from banks import (
     pending_bank_request_ids,
     respond_to_bank_invite,
     transfer_bank_ownership,
+    update_bank_profile,
 )
 from database import close_database, initialize_database
 from economy import (
@@ -36,6 +38,7 @@ from economy import (
     get_transaction_history_page,
     has_admin_history_access,
 )
+from models import Bank
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO").upper(),
@@ -43,6 +46,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger("fihcoin.bot")
 FIHCOIN = "<:fihcoin:1575710572907987064>"
+BANK_IMAGE_TYPES = {
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+}
+BANK_IMAGE_MAX_BYTES = 8 * 1024 * 1024
 
 
 class BankRequestView(discord.ui.View):
@@ -594,22 +604,54 @@ def bank_details_view(guild: discord.Guild, details: BankDetails) -> discord.ui.
     if details.member_count > len(member_mentions):
         member_text += f" … and {details.member_count - len(member_mentions)} more"
     owner = f"<@{bank.owner_discord_id}>"
-    view = discord.ui.LayoutView(timeout=None)
-    view.add_item(
-        discord.ui.Container(
-            discord.ui.TextDisplay(
-                f"## 🏰 {discord.utils.escape_markdown(bank.name)}\n"
-                f"-# {discord.utils.escape_markdown(guild.name)}"
+    heading = discord.ui.TextDisplay(
+        f"## 🏰 {discord.utils.escape_markdown(bank.name)}\n"
+        f"-# {discord.utils.escape_markdown(guild.name)}"
+    )
+    if bank.logo_url:
+        heading = discord.ui.Section(
+            heading,
+            accessory=discord.ui.Thumbnail(
+                bank.logo_url,
+                description=f"{bank.name} logo",
             ),
-            discord.ui.Separator(),
+        )
+    contents = [heading, discord.ui.Separator()]
+    if bank.banner_url:
+        contents.extend(
+            [
+                discord.ui.MediaGallery(
+                    discord.MediaGalleryItem(
+                        media=bank.banner_url,
+                        description=f"{bank.name} banner",
+                    )
+                ),
+                discord.ui.Separator(),
+            ]
+        )
+    description = (
+        f"**Description:** {discord.utils.escape_markdown(bank.description)}\n"
+        if bank.description
+        else ""
+    )
+    contents.extend(
+        [
             discord.ui.TextDisplay(
+                f"{description}"
                 f"**Owner:** {owner}\n"
                 f"**Members ({details.member_count:,}):** {member_text}\n"
-                f"**Vault:** {bank.balance:,.2f} {FIHCOIN} / {capacity:,.2f} {FIHCOIN}\n"
+                f"**Vault:** {bank.balance:,.2f} {FIHCOIN} / "
+                f"{capacity:,.2f} {FIHCOIN}\n"
                 f"**Storage level:** {bank.upgrade_level}"
             ),
             discord.ui.Separator(),
             discord.ui.TextDisplay("Banks are server-specific"),
+        ]
+    )
+    view = discord.ui.LayoutView(timeout=None)
+    view.add_item(
+        discord.ui.Container(
+            *contents,
             accent_colour=0x7C3AED,
         )
     )
@@ -642,25 +684,558 @@ async def _notify_bank_requester(outcome: BankRequestOutcome) -> None:
         )
 
 
-@bank_group.command(name="create", description="Create a bank in this server.")
-@app_commands.guild_only()
-@app_commands.describe(name="A unique bank name, 2–32 characters.")
-async def bank_create(interaction: discord.Interaction, name: str) -> None:
-    if interaction.guild is None:
-        await interaction.response.send_message("Banks are only available in a server.")
-        return
-    await interaction.response.defer(thinking=True)
+def _bank_image_filename(attachment: discord.Attachment, slot: str) -> str:
+    extension = BANK_IMAGE_TYPES.get(attachment.content_type or "")
+    if extension is None:
+        raise BankError("Bank banners and logos must be PNG, JPEG, GIF, or WebP images.")
+    if attachment.size > BANK_IMAGE_MAX_BYTES:
+        raise BankError("Each bank image must be 8 MB or smaller.")
+    return f"bank-{slot}{extension}"
+
+
+def _bank_profile_embed(
+    name: str,
+    description: Optional[str],
+    owner_discord_id: int,
+    *,
+    banner_url: Optional[str] = None,
+    logo_url: Optional[str] = None,
+    empty_description: str = "A shared bank has been created.",
+) -> discord.Embed:
+    embed = discord.Embed(
+        title=f"🏦 {discord.utils.escape_markdown(name)}",
+        description=(
+            discord.utils.escape_markdown(description)
+            if description
+            else empty_description
+        ),
+        colour=discord.Colour.gold(),
+    )
+    embed.add_field(name="Owner", value=f"<@{owner_discord_id}>")
+    if banner_url:
+        embed.set_image(url=banner_url)
+    if logo_url:
+        embed.set_thumbnail(url=logo_url)
+    return embed
+
+
+async def _delete_profile_message(message: discord.Message, context: str) -> bool:
     try:
-        bank = await create_bank(interaction.guild.id, interaction.user.id, name)
-    except BankError as error:
-        await interaction.followup.send(str(error))
+        await message.delete()
+        return True
+    except discord.HTTPException:
+        logger.exception("Could not remove %s bank profile message", context)
+        return False
+
+
+class BankCreateModal(discord.ui.Modal):
+    def __init__(self, guild_id: int, owner_discord_id: int) -> None:
+        super().__init__(title="Create a bank")
+        self.guild_id = guild_id
+        self.owner_discord_id = owner_discord_id
+        self.name_input = discord.ui.TextInput(
+            custom_id="bank_name",
+            placeholder="A unique name (2-32 characters)",
+            min_length=2,
+            max_length=32,
+        )
+        self.description_input = discord.ui.TextInput(
+            custom_id="bank_description",
+            style=discord.TextStyle.paragraph,
+            placeholder="What is this bank for? (optional)",
+            required=False,
+            max_length=500,
+        )
+        self.banner_upload = discord.ui.FileUpload(
+            custom_id="bank_banner",
+            required=False,
+            min_values=0,
+            max_values=1,
+        )
+        self.logo_upload = discord.ui.FileUpload(
+            custom_id="bank_logo",
+            required=False,
+            min_values=0,
+            max_values=1,
+        )
+        self.add_item(
+            discord.ui.Label(
+                text="Bank name",
+                description="Required",
+                component=self.name_input,
+            )
+        )
+        self.add_item(
+            discord.ui.Label(
+                text="Description",
+                description="Optional, up to 500 characters",
+                component=self.description_input,
+            )
+        )
+        self.add_item(
+            discord.ui.Label(
+                text="Banner image",
+                description="Optional PNG, JPEG, GIF, or WebP; up to 8 MB",
+                component=self.banner_upload,
+            )
+        )
+        self.add_item(
+            discord.ui.Label(
+                text="Logo image",
+                description="Optional PNG, JPEG, GIF, or WebP; up to 8 MB",
+                component=self.logo_upload,
+            )
+        )
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if (
+            interaction.guild is None
+            or interaction.guild.id != self.guild_id
+            or interaction.user.id != self.owner_discord_id
+        ):
+            await interaction.response.send_message(
+                "This bank form is only valid for its original server member.",
+                ephemeral=True,
+            )
+            return
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        channel = interaction.channel
+        if channel is None:
+            await interaction.followup.send(
+                "I couldn't find the server channel to post the bank profile.",
+                ephemeral=True,
+            )
+            return
+
+        description = (self.description_input.value or "").strip() or None
+        banner = self.banner_upload.values[0] if self.banner_upload.values else None
+        logo = self.logo_upload.values[0] if self.logo_upload.values else None
+        files: list[discord.File] = []
+        filenames: dict[str, str] = {}
+        try:
+            if banner is not None:
+                filenames["banner"] = _bank_image_filename(banner, "banner")
+            if logo is not None:
+                filenames["logo"] = _bank_image_filename(logo, "logo")
+            if banner is not None:
+                files.append(await banner.to_file(filename=filenames["banner"]))
+            if logo is not None:
+                files.append(await logo.to_file(filename=filenames["logo"]))
+        except BankError as error:
+            for file in files:
+                file.close()
+            await interaction.followup.send(str(error), ephemeral=True)
+            return
+        except discord.HTTPException:
+            for file in files:
+                file.close()
+            logger.exception("Failed to retrieve bank image uploads for user %s", interaction.user.id)
+            await interaction.followup.send(
+                "I couldn't read one of those image uploads. Please try again.",
+                ephemeral=True,
+            )
+            return
+        except Exception:
+            for file in files:
+                file.close()
+            logger.exception("Unexpected error retrieving bank image uploads for user %s", interaction.user.id)
+            await interaction.followup.send(
+                "I couldn't read one of those image uploads. Please try again.",
+                ephemeral=True,
+            )
+            return
+
+        name = self.name_input.value
+        embed = _bank_profile_embed(
+            name,
+            description,
+            self.owner_discord_id,
+            banner_url=(
+                f"attachment://{filenames['banner']}"
+                if "banner" in filenames
+                else None
+            ),
+            logo_url=(
+                f"attachment://{filenames['logo']}"
+                if "logo" in filenames
+                else None
+            ),
+        )
+
+        try:
+            profile_message = await channel.send(
+                embed=embed,
+                files=files,
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+        except discord.HTTPException:
+            logger.exception("Failed to post bank profile for user %s", interaction.user.id)
+            await interaction.followup.send(
+                "I couldn't upload the bank profile, so the bank was not created.",
+                ephemeral=True,
+            )
+            return
+        except Exception:
+            logger.exception("Unexpected error posting bank profile for user %s", interaction.user.id)
+            await interaction.followup.send(
+                "I couldn't upload the bank profile, so the bank was not created.",
+                ephemeral=True,
+            )
+            return
+        finally:
+            for file in files:
+                file.close()
+
+        uploaded_urls = {
+            attachment.filename: attachment.url
+            for attachment in profile_message.attachments
+        }
+        missing_uploads = [
+            filename
+            for filename in filenames.values()
+            if filename not in uploaded_urls
+        ]
+        if missing_uploads:
+            removed = await _delete_profile_message(profile_message, "incomplete creation")
+            message = "Discord did not retain all uploaded images, so the bank was not created."
+            if not removed:
+                message += " A server moderator may need to remove the profile post."
+            await interaction.followup.send(message, ephemeral=True)
+            return
+        try:
+            bank = await create_bank(
+                self.guild_id,
+                self.owner_discord_id,
+                name,
+                description=description,
+                banner_url=uploaded_urls.get(filenames.get("banner", "")),
+                logo_url=uploaded_urls.get(filenames.get("logo", "")),
+            )
+        except BankError as error:
+            removed = await _delete_profile_message(profile_message, "failed creation")
+            if not removed:
+                error_message = (
+                    f"{error} I couldn't remove the temporary profile post; "
+                    "a server moderator may need to remove it."
+                )
+            else:
+                error_message = str(error)
+            await interaction.followup.send(error_message, ephemeral=True)
+            return
+        except Exception:
+            logger.exception("Failed to create bank for user %s", interaction.user.id)
+            await interaction.followup.send(
+                "I couldn't confirm whether the bank was created. Check `/bank view` "
+                "before retrying; its profile post may already be visible.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.followup.send(
+            f"🏰 **{discord.utils.escape_markdown(bank.name)}** was created. You are its owner.",
+            ephemeral=True,
+        )
+
+
+@bank_group.command(name="create", description="Open the bank creation form.")
+@app_commands.guild_only()
+async def bank_create(interaction: discord.Interaction) -> None:
+    if interaction.guild is None:
+        await interaction.response.send_message(
+            "Banks are only available in a server.",
+            ephemeral=True,
+        )
         return
+    await interaction.response.send_modal(
+        BankCreateModal(interaction.guild.id, interaction.user.id)
+    )
+
+
+class BankEditModal(discord.ui.Modal):
+    def __init__(self, guild_id: int, owner_discord_id: int, bank: Bank) -> None:
+        super().__init__(title="Edit your bank")
+        self.guild_id = guild_id
+        self.owner_discord_id = owner_discord_id
+        self.bank = bank
+        self.name_input = discord.ui.TextInput(
+            custom_id="bank_edit_name",
+            default=bank.name,
+            min_length=2,
+            max_length=32,
+        )
+        self.description_input = discord.ui.TextInput(
+            custom_id="bank_edit_description",
+            style=discord.TextStyle.paragraph,
+            default=bank.description or "",
+            placeholder="Leave empty to remove the description",
+            required=False,
+            max_length=500,
+        )
+        self.banner_upload = discord.ui.FileUpload(
+            custom_id="bank_edit_banner",
+            required=False,
+            min_values=0,
+            max_values=1,
+        )
+        self.logo_upload = discord.ui.FileUpload(
+            custom_id="bank_edit_logo",
+            required=False,
+            min_values=0,
+            max_values=1,
+        )
+        self.add_item(
+            discord.ui.Label(
+                text="Bank name",
+                description="Required; the current name is prefilled",
+                component=self.name_input,
+            )
+        )
+        self.add_item(
+            discord.ui.Label(
+                text="Description",
+                description="Edit the text or clear it; up to 500 characters",
+                component=self.description_input,
+            )
+        )
+        self.add_item(
+            discord.ui.Label(
+                text="Banner image",
+                description="Upload a replacement or leave empty to keep it",
+                component=self.banner_upload,
+            )
+        )
+        self.add_item(
+            discord.ui.Label(
+                text="Logo image",
+                description="Upload a replacement or leave empty to keep it",
+                component=self.logo_upload,
+            )
+        )
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if (
+            interaction.guild is None
+            or interaction.guild.id != self.guild_id
+            or interaction.user.id != self.owner_discord_id
+        ):
+            await interaction.response.send_message(
+                "This bank form is only valid for its original server member.",
+                ephemeral=True,
+            )
+            return
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        channel = interaction.channel
+        if channel is None:
+            await interaction.followup.send(
+                "I couldn't find the server channel to post the updated bank profile.",
+                ephemeral=True,
+            )
+            return
+
+        banner = self.banner_upload.values[0] if self.banner_upload.values else None
+        logo = self.logo_upload.values[0] if self.logo_upload.values else None
+        files: list[discord.File] = []
+        filenames: dict[str, str] = {}
+        try:
+            if banner is not None:
+                filenames["banner"] = _bank_image_filename(banner, "banner")
+            if logo is not None:
+                filenames["logo"] = _bank_image_filename(logo, "logo")
+            if banner is not None:
+                files.append(await banner.to_file(filename=filenames["banner"]))
+            if logo is not None:
+                files.append(await logo.to_file(filename=filenames["logo"]))
+        except BankError as error:
+            for file in files:
+                file.close()
+            await interaction.followup.send(str(error), ephemeral=True)
+            return
+        except Exception:
+            for file in files:
+                file.close()
+            logger.exception(
+                "Failed to retrieve bank edit image uploads for user %s",
+                interaction.user.id,
+            )
+            await interaction.followup.send(
+                "I couldn't read one of those image uploads. Please try again.",
+                ephemeral=True,
+            )
+            return
+
+        banner_source = (
+            f"attachment://{filenames['banner']}"
+            if banner is not None
+            else self.bank.banner_url
+        )
+        logo_source = (
+            f"attachment://{filenames['logo']}"
+            if logo is not None
+            else self.bank.logo_url
+        )
+        embed = _bank_profile_embed(
+            self.name_input.value,
+            (self.description_input.value or "").strip() or None,
+            self.owner_discord_id,
+            banner_url=banner_source,
+            logo_url=logo_source,
+            empty_description="Bank profile updated.",
+        )
+        try:
+            profile_message = await channel.send(
+                embed=embed,
+                files=files,
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+        except Exception:
+            logger.exception("Failed to post edited bank profile for user %s", interaction.user.id)
+            await interaction.followup.send(
+                "I couldn't post the updated bank profile, so no changes were saved.",
+                ephemeral=True,
+            )
+            return
+        finally:
+            for file in files:
+                file.close()
+
+        uploaded_urls = {
+            attachment.filename: attachment.url
+            for attachment in profile_message.attachments
+        }
+        missing_uploads = [
+            filename
+            for filename in filenames.values()
+            if filename not in uploaded_urls
+        ]
+        if missing_uploads:
+            removed = await _delete_profile_message(profile_message, "incomplete edit")
+            message = "Discord did not retain all uploaded images, so no profile changes were saved."
+            if not removed:
+                message += " A server moderator may need to remove the profile post."
+            await interaction.followup.send(message, ephemeral=True)
+            return
+        try:
+            bank = await update_bank_profile(
+                self.guild_id,
+                self.owner_discord_id,
+                self.name_input.value,
+                description=(self.description_input.value or "").strip() or None,
+                banner_url=(
+                    uploaded_urls[filenames["banner"]]
+                    if banner is not None
+                    else None
+                ),
+                logo_url=(
+                    uploaded_urls[filenames["logo"]]
+                    if logo is not None
+                    else None
+                ),
+            )
+        except BankError as error:
+            removed = await _delete_profile_message(profile_message, "failed edit")
+            if not removed:
+                error_message = (
+                    f"{error} I couldn't remove the temporary profile post; "
+                    "a server moderator may need to remove it."
+                )
+            else:
+                error_message = str(error)
+            await interaction.followup.send(error_message, ephemeral=True)
+            return
+        except Exception:
+            logger.exception("Failed to save edited bank profile for user %s", interaction.user.id)
+            await interaction.followup.send(
+                "I couldn't confirm whether the profile changes were saved. "
+                "Check `/bank view` before retrying; the updated profile post may be visible.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.followup.send(
+            f"🏦 **{discord.utils.escape_markdown(bank.name)}** was updated. "
+            "Use `/bank view` to see the current profile.",
+            ephemeral=True,
+        )
+
+
+class BankEditConfirmationView(discord.ui.View):
+    def __init__(self, guild_id: int, owner_discord_id: int, bank: Bank) -> None:
+        super().__init__(timeout=120)
+        self.guild_id = guild_id
+        self.owner_discord_id = owner_discord_id
+        self.bank = bank
+        self.form_opened = False
+
+    @discord.ui.button(label="Yes, edit bank", style=discord.ButtonStyle.primary)
+    async def confirm(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ) -> None:
+        if interaction.user.id != self.owner_discord_id:
+            await interaction.response.send_message(
+                "Only the bank owner can edit this bank.",
+                ephemeral=True,
+            )
+            return
+        if self.form_opened:
+            await interaction.response.send_message(
+                "The edit form has already been opened. Run `/bank edit` again if it was closed.",
+                ephemeral=True,
+            )
+            return
+        self.form_opened = True
+        await interaction.response.send_modal(
+            BankEditModal(self.guild_id, self.owner_discord_id, self.bank)
+        )
+
+    @discord.ui.button(label="No, cancel", style=discord.ButtonStyle.secondary)
+    async def cancel(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ) -> None:
+        if interaction.user.id != self.owner_discord_id:
+            await interaction.response.send_message(
+                "Only the bank owner can cancel this prompt.",
+                ephemeral=True,
+            )
+            return
+        await interaction.response.edit_message(
+            content="Bank edit cancelled.",
+            view=None,
+        )
+
+
+@bank_group.command(name="edit", description="Edit your bank profile.")
+@app_commands.guild_only()
+async def bank_edit(interaction: discord.Interaction) -> None:
+    if interaction.guild is None:
+        await interaction.response.send_message(
+            "Banks are only available in a server.",
+            ephemeral=True,
+        )
+        return
+    await interaction.response.defer(ephemeral=True, thinking=True)
+    try:
+        bank = await get_owned_bank(interaction.guild.id, interaction.user.id)
     except Exception:
-        logger.exception("Failed to create bank for user %s", interaction.user.id)
-        await interaction.followup.send("I couldn't create that bank right now. Please try again.")
+        logger.exception("Failed to load bank edit prompt for user %s", interaction.user.id)
+        await interaction.followup.send("I couldn't load your bank profile right now.", ephemeral=True)
+        return
+    if bank is None:
+        await interaction.followup.send(
+            "Only the owner of a bank can edit it. Create a bank or ask its owner to transfer ownership.",
+            ephemeral=True,
+        )
         return
     await interaction.followup.send(
-        f"🏰 **{discord.utils.escape_markdown(bank.name)}** was created. You are its owner."
+        f"Do you want to edit **{discord.utils.escape_markdown(bank.name)}**? "
+        "Confirm to open the form, or cancel to leave it unchanged. "
+        "Empty image uploads keep the current images.",
+        view=BankEditConfirmationView(interaction.guild.id, interaction.user.id, bank),
+        ephemeral=True,
+        allowed_mentions=discord.AllowedMentions.none(),
     )
 
 

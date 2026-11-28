@@ -101,6 +101,14 @@ async def initialize_database() -> None:
         )
         await connection.execute(
             text(
+                "ALTER TABLE banks "
+                "ADD COLUMN IF NOT EXISTS description TEXT, "
+                "ADD COLUMN IF NOT EXISTS banner_url TEXT, "
+                "ADD COLUMN IF NOT EXISTS logo_url TEXT"
+            )
+        )
+        await connection.execute(
+            text(
                 """
                 DO $$
                 BEGIN

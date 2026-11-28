@@ -1,13 +1,17 @@
 from contextlib import asynccontextmanager
 import logging
+import os
 
+import aiohttp
 from fastapi import FastAPI, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
 
 from database import (
     check_database_connection,
     close_database,
     initialize_database,
 )
+from dashboard import router as dashboard_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("fihcoin.api")
@@ -16,8 +20,15 @@ logger = logging.getLogger("fihcoin.api")
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     await initialize_database()
-    yield
-    await close_database()
+    http_session = aiohttp.ClientSession(
+        timeout=aiohttp.ClientTimeout(total=10)
+    )
+    app.state.http_session = http_session
+    try:
+        yield
+    finally:
+        await http_session.close()
+        await close_database()
 
 
 app = FastAPI(
@@ -26,6 +37,18 @@ app = FastAPI(
     version="0.2.0",
     lifespan=lifespan,
 )
+
+frontend_url = os.getenv("DASHBOARD_FRONTEND_URL", "").strip()
+if frontend_url:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[frontend_url.rstrip("/")],
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Content-Type", "X-CSRF-Token"],
+    )
+
+app.include_router(dashboard_router)
 
 
 @app.get("/")

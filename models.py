@@ -7,7 +7,7 @@ from typing import Optional
 
 from sqlalchemy import (
     BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer,
-    JSON, Numeric, String, UniqueConstraint, func,
+    JSON, Numeric, String, Text, UniqueConstraint, func,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -43,6 +43,9 @@ class Bank(Base):
     name: Mapped[str] = mapped_column(String(32), nullable=False)
     normalized_name: Mapped[str] = mapped_column(String(64), nullable=False)
     owner_discord_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    banner_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    logo_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     balance: Mapped[Decimal] = mapped_column(
         Numeric(20, 2),
         nullable=False,
@@ -242,6 +245,19 @@ class AdminAuditLog(Base):
     target_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     details: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class DashboardSession(Base):
+    __tablename__ = "dashboard_sessions"
+    __table_args__ = (
+        Index("ix_dashboard_sessions_user_expires", "discord_user_id", "expires_at"),
+    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    discord_user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class GuildSettings(Base):

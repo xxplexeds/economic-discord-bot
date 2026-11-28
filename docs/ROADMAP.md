@@ -29,7 +29,7 @@ This roadmap separates confirmed decisions from implemented functionality. A che
 - [ ] Atomic balance service and transaction history.
 - [ ] /balance and member profile.
 - [ ] Payments, deposits, withdrawals, and configurable taxes.
-- [ ] Administrative balance adjustments with confirmation and audit.
+- [x] Website exact-balance setting with confirmation, transaction history, and audit.
 
 ## Phase 4 — Access control and safety
 
@@ -60,13 +60,15 @@ This roadmap separates confirmed decisions from implemented functionality. A che
 
 ## Phase 7 — Next.js website
 
-- [ ] Discord OAuth2 login and secure server-side sessions.
-- [ ] Member dashboard: profile, balances, and history.
-- [ ] Administrator dashboard: overview and bot status.
+- [x] Discord OAuth2 login and secure server-side sessions.
+- [x] Member dashboard: profile, balances, and history.
+- [x] Administrator dashboard: economy overview and current guild member lookup.
+- [ ] Administrator dashboard: bot status.
 - [ ] Access Control: authorized User IDs, authorized Role IDs, blocked users, and access history.
-- [ ] Economy management and transaction views.
+- [x] Economy management: audited exact-balance setting.
+- [ ] Additional economy management and transaction views.
 - [ ] Analytics, maintenance, logging, audit logs, and backup management.
-- [ ] Responsive desktop/mobile layout.
+- [x] Responsive desktop/mobile layout for the initial member/admin milestone.
 
 ## Phase 8 — Banks and other economy features
 
