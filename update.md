@@ -1,5 +1,19 @@
 # Fihcoin Economic Bot — Update Log
 
+## 2026-11-27 — Add bank creation form
+
+### Added
+- Replaced the name-only `/bank create` command with a form for a required name and optional description, banner, and logo.
+- Store uploaded image URLs from the bank's creation card and show the banner and logo in `/bank view`.
+- Added owner-only `/bank edit` with a confirmation prompt, prefilled name and description, and optional image replacements.
+- Add additive PostgreSQL columns for bank descriptions and image URLs.
+
+### Notes
+- Banner and logo uploads accept PNG, JPEG, GIF, or WebP up to 8 MB each.
+- Keep the bank creation card message because its attachments host the bank profile images.
+
+---
+
 ## 2026-11-27 — Add shared bank vaults
 
 ### Added

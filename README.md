@@ -57,7 +57,9 @@ For both application services, a Railway reference such as `${{Postgres.DATABASE
 The `/bank` group supports shared server vaults, owner-approved member deposits
 and withdrawals, and owner-purchased storage upgrades. Shared bank funds are
 separate from each member's personal bank account; deposits and withdrawals
-move currency between the shared vault and the member's wallet.
+move currency between the shared vault and the member's wallet. `/bank create`
+opens a form for a required name and optional description, banner, and logo;
+owners can confirm and use `/bank edit` to update the profile.
 
 The initial web dashboard milestone provides Discord OAuth login, member
 balances and transaction history, an admin overview and member lookup, and

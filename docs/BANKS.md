@@ -6,12 +6,19 @@ separate from members' personal bank accounts.
 
 ## Commands
 
-- `/bank create name` creates a bank and makes the caller its owner.
+- `/bank create` opens a form with a required bank name and optional description,
+  banner image, and logo image. The banner and logo accept PNG, JPEG, GIF, or
+  WebP files up to 8 MB each. The caller becomes the bank owner.
+- `/bank edit` is owner-only and asks for confirmation before opening a form
+  prefilled with the current name and description. An empty description clears
+  it; leaving either image upload empty keeps the current image. Updated profiles
+  are posted as a new bank card.
 - `/bank invite member` lets the owner invite a server member.
 - `/bank invites` lists the caller's pending invitations.
 - `/bank accept bank_name` and `/bank decline bank_name` respond to invitations.
 - `/bank view` shows the caller's bank; `/bank view bank_name` looks up any bank
-  in the server, including its vault balance, capacity, and storage level.
+  in the server, including its description, images, vault balance, capacity,
+  and storage level.
 - `/bank deposit amount` and `/bank withdraw amount` move currency between a
   member's wallet and the shared vault. The owner transacts immediately; other
   members' requests are sent to the owner by DM for approval or rejection.
@@ -29,6 +36,11 @@ and shared vault, together with their economy and bank transaction records, are
 committed atomically. Owner approvals are delivered privately with persistent
 Approve and Decline buttons; results are DM'd to the requester. If the owner
 cannot receive DMs, the request is cancelled.
+
+Uploaded images are attached to the creation or edit card that uploaded them,
+so Discord can host them for later bank views. Keep the corresponding card
+message: deleting it also removes its image attachments. Empty image uploads in
+the edit form keep the existing image links.
 
 ## Vault upgrades
 
