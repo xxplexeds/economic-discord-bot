@@ -13,7 +13,7 @@ Official currency emoji: `<:fihcoin:1575710572907987064>`
 - No gambling mechanics
 - Python + discord.py bot
 - FastAPI backend
-- Next.js website (planned)
+- Next.js dashboard (initial member/admin milestone implemented)
 - Railway hosting
 
 ## Initial services
@@ -22,6 +22,7 @@ Official currency emoji: `<:fihcoin:1575710572907987064>`
 - `api.py` — FastAPI service with database-aware `/health` endpoint
 - `database.py` — async SQLAlchemy engine, sessions, and PostgreSQL checks
 - `models.py` — initial player, account, and transaction tables
+- `web/` — Next.js member dashboard and initial administrator console
 
 ## Database foundation
 
@@ -37,6 +38,7 @@ See [docs/DATABASE.md](docs/DATABASE.md) for details. Versioned schema migration
 4. Start the bot: `python bot.py`
 5. Start the API separately: `uvicorn api:app --host 0.0.0.0 --port 8000`
 6. Check `/health`; it should return both `"status": "healthy"` and `"database": "connected"`.
+7. Configure Discord OAuth and run the dashboard as described in [docs/DASHBOARD.md](docs/DASHBOARD.md).
 
 Never commit your `.env` file or share your Discord bot token or database URL.
 
@@ -46,6 +48,8 @@ Deploy the repository as separate Railway services:
 
 - Bot start command: `python bot.py`
 - API start command: `uvicorn api:app --host 0.0.0.0 --port $PORT`
+- Dashboard build/start commands: `cd web && npm ci && npm run build`, then `cd web && npm start`
+- Dashboard variable: `NEXT_PUBLIC_API_URL` set to the public API origin at build time
 - PostgreSQL: add a Railway PostgreSQL service and provide its connection URL as `DATABASE_URL`
 
 For both application services, a Railway reference such as `${{Postgres.DATABASE_URL}}` can be used when the database service is named `Postgres`.
@@ -54,3 +58,9 @@ The `/bank` group supports shared server vaults, owner-approved member deposits
 and withdrawals, and owner-purchased storage upgrades. Shared bank funds are
 separate from each member's personal bank account; deposits and withdrawals
 move currency between the shared vault and the member's wallet.
+
+The initial web dashboard milestone provides Discord OAuth login, member
+balances and transaction history, an admin overview and member lookup, and
+audited exact-balance setting. See [docs/DASHBOARD.md](docs/DASHBOARD.md) for
+OAuth configuration and local development. Deployment is not configured by
+this repository.
